@@ -2,10 +2,9 @@
 import { message } from 'ant-design-vue'
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { getDashboardData } from '../../api/modules/dashboard'
+import brandLogo from '../../assets/logo.png'
 
 const BaseChart = defineAsyncComponent(() => import('../../components/charts/BaseChart.vue'))
-
-const brandLogo = 'https://www.gokinsolar.com/upload/20250625/3b8a42a036acdeee463952c58936b374.png'
 
 const loading = ref(false)
 const dashboard = ref({
@@ -175,24 +174,7 @@ onMounted(() => {
         </a-card>
       </div>
 
-      <a-card title="今日待办" :bordered="false" class="page-section">
-        <a-timeline>
-          <a-timeline-item v-for="todo in dashboard.todoList" :key="todo.title" color="blue">
-            <div style="font-weight: 600">{{ todo.title }}</div>
-            <div class="subtle-text">责任人：{{ todo.owner }} | 截止：{{ todo.deadline }}</div>
-          </a-timeline-item>
-        </a-timeline>
-      </a-card>
-
-      <a-card title="今日任务明细" :bordered="false">
-        <a-table :data-source="dashboard.taskList" :pagination="false" :columns="taskColumns" row-key="key">
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'status'">
-              <a-tag :color="getTagColor(record.status)">{{ record.status }}</a-tag>
-            </template>
-          </template>
-        </a-table>
-      </a-card>
+      <!-- 今日待办 & 今日任务明细区块已按需求移除 -->
 
     </a-spin>
   </div>

@@ -61,17 +61,6 @@ async function submit() {
         </p>
       </div>
 
-      <div class="info-grid">
-        <a-card :bordered="false">
-          <a-statistic title="接入设备" :value="286" suffix="台" />
-        </a-card>
-        <a-card :bordered="false">
-          <a-statistic title="今日任务" :value="18" suffix="项" />
-        </a-card>
-        <a-card :bordered="false">
-          <a-statistic title="闭环及时率" :value="91.4" suffix="%" />
-        </a-card>
-      </div>
     </section>
 
     <section style="display: flex; align-items: center; justify-content: center; padding: 32px">

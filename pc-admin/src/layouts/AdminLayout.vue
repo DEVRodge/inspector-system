@@ -19,12 +19,22 @@ import { menuBadges } from '../mock/data'
 import { useAuthStore } from '../stores/auth'
 import { getMenusCurrentTree } from '../api/modules/menu'
 import { isMockEnabled } from '../api/http'
+import { getMessageList, getUnreadTotal, readAll, readBatch } from '../api/modules/message'
+
+import brandLogo from '../assets/logo.png'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const collapsed = ref(false)
-const brandLogo = 'https://www.gokinsolar.com/upload/20250625/3b8a42a036acdeee463952c58936b374.png'
+
+const noticePopoverOpen = ref(false)
+const noticeLoading = ref(false)
+const noticeUnreadTotal = ref(0)
+const noticeItems = ref([])
+const noticePageNumber = ref(1)
+const noticePageSize = ref(10)
+const noticeTotal = ref(0)
 
 const iconMap = {
   AlertOutlined,
@@ -88,7 +98,57 @@ onMounted(async () => {
       menuItemsFromApi.value = null
     }
   }
+
+  await Promise.all([refreshUnreadTotal(), loadNotices()])
 })
+
+async function refreshUnreadTotal() {
+  try {
+    const total = await getUnreadTotal()
+    noticeUnreadTotal.value = Number(total || 0)
+  } catch {
+    noticeUnreadTotal.value = 0
+  }
+}
+
+async function loadNotices(page = 1) {
+  noticeLoading.value = true
+  noticePageNumber.value = page
+  try {
+    const res = await getMessageList({
+      pageNumber: noticePageNumber.value,
+      pageSize: noticePageSize.value,
+    })
+    noticeTotal.value = res.total ?? 0
+    noticeItems.value =
+      Array.isArray(res.records) && res.records.length > 0
+        ? res.records
+        : []
+  } finally {
+    noticeLoading.value = false
+  }
+}
+
+async function handleNoticeOpenChange(open) {
+  noticePopoverOpen.value = open
+  if (open) {
+    await Promise.all([refreshUnreadTotal(), loadNotices(noticePageNumber.value)])
+  }
+}
+
+async function handleNoticeReadAll() {
+  await readAll()
+  await Promise.all([refreshUnreadTotal(), loadNotices(noticePageNumber.value)])
+}
+
+async function handleNoticeItemClick(item) {
+  if (!item?.id || item.hasRead) return
+  await readBatch([item.id])
+  item.hasRead = true
+  if (noticeUnreadTotal.value > 0) {
+    noticeUnreadTotal.value -= 1
+  }
+}
 
 function jump({ key }) {
   router.push(key)
@@ -178,14 +238,89 @@ function logout() {
 
         <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0">
           <a-space size="small">
-            <a-badge :count="menuBadges['/tasks']" :offset="[2, 2]">
-              <a-button type="text">待办</a-button>
-            </a-badge>
-            <a-badge :count="menuBadges['/exceptions']" :offset="[2, 2]">
-              <a-button type="text">
-                <BellOutlined />
-              </a-button>
-            </a-badge>
+            <a-popover
+              placement="bottomRight"
+              trigger="click"
+              :open="noticePopoverOpen"
+              @openChange="handleNoticeOpenChange"
+            >
+              <template #content>
+                <a-card
+                  :bordered="false"
+                  style="width: 360px; box-shadow: none; padding: 0"
+                  body-style="padding: 0"
+                >
+                  <div
+                    style="
+                      padding: 8px 16px;
+                      display: flex;
+                      align-items: center;
+                      justify-content: space-between;
+                      border-bottom: 1px solid #f0f0f0;
+                    "
+                  >
+                    <span style="font-weight: 600">消息中心</span>
+                    <a-typography-link @click="handleNoticeReadAll">全部已读</a-typography-link>
+                  </div>
+                  <a-spin :spinning="noticeLoading">
+                    <div style="max-height: 360px; overflow-y: auto; padding: 8px 0">
+                      <template v-if="noticeItems.length">
+                        <a-list :data-source="noticeItems" item-layout="horizontal">
+                          <template #renderItem="{ item }">
+                            <a-list-item
+                              style="cursor: pointer; padding: 8px 16px"
+                              @click="handleNoticeItemClick(item)"
+                            >
+                              <a-list-item-meta>
+                                <template #title>
+                                  <div style="display: flex; justify-content: space-between; gap: 8px">
+                                    <span style="font-weight: 600">
+                                      {{ item.msgSceneName || item.msgType || '系统通知' }}
+                                    </span>
+                                    <span style="font-size: 12px; color: #86909c">
+                                      {{ item.sendTime }}
+                                    </span>
+                                  </div>
+                                </template>
+                                <template #description>
+                                  <div
+                                    :style="{
+                                      fontSize: '13px',
+                                      color: item.hasRead ? '#86909c' : '#1f2329',
+                                      fontWeight: item.hasRead ? 400 : 500,
+                                    }"
+                                  >
+                                    {{ item.msgContent }}
+                                  </div>
+                                </template>
+                              </a-list-item-meta>
+                            </a-list-item>
+                          </template>
+                        </a-list>
+                      </template>
+                      <template v-else>
+                        <div
+                          style="
+                            padding: 24px 16px;
+                            text-align: center;
+                            color: #c0c4cc;
+                            font-size: 13px;
+                          "
+                        >
+                          暂无消息
+                        </div>
+                      </template>
+                    </div>
+                  </a-spin>
+                </a-card>
+              </template>
+
+              <a-badge :count="noticeUnreadTotal" :offset="[2, 2]">
+                <a-button type="text">
+                  <BellOutlined />
+                </a-button>
+              </a-badge>
+            </a-popover>
           </a-space>
           <a-dropdown>
             <a-space style="cursor: pointer">
