@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import QRCode from 'qrcode'
 import {
@@ -8,7 +8,10 @@ import {
   getDepartments,
   importEquipment,
 } from '../../api/modules/equipment'
+import { getDictionaryList } from '../../api/modules/dictionary'
+import { DEVICE_TYPE_DICT_CODE, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
 import { equipmentRows } from '../../mock/data'
+import { isMockEnabled } from '../../api/http'
 
 const query = reactive({
   keyword: '',
@@ -63,12 +66,33 @@ function fillForm(record) {
 }
 
 const teamOptions = ref([])
+const deviceTypeOptions = ref([])
+
+async function loadDeviceTypes() {
+  if (isMockEnabled) {
+    deviceTypeOptions.value = mockDeviceTypes
+      .filter((d) => d.category === DEVICE_TYPE_DICT_CODE && d.status === '启用')
+      .map((d) => ({ value: d.label, label: d.label }))
+  } else {
+    try {
+      const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
+      const arr = Array.isArray(list) ? list : list?.list ?? []
+      deviceTypeOptions.value = (arr || [])
+        .filter((d) => d.enabled !== false)
+        .map((d) => ({ value: d.name ?? d.value, label: d.name ?? d.value }))
+    } catch {
+      deviceTypeOptions.value = []
+    }
+  }
+}
+
+onMounted(() => loadDeviceTypes())
 
 async function openCreate() {
   currentRow.value = null
   fillForm()
   formVisible.value = true
-  await loadDepartments()
+  await Promise.all([loadDepartments(), loadDeviceTypes()])
 }
 
 async function loadDepartments() {
@@ -92,7 +116,7 @@ async function openEdit(record) {
   currentRow.value = record
   fillForm(record)
   formVisible.value = true
-  await loadDepartments()
+  await Promise.all([loadDepartments(), loadDeviceTypes()])
 }
 
 function saveRow() {
@@ -347,12 +371,7 @@ async function handleImportFile(e) {
       <div class="table-toolbar">
         <div class="table-toolbar__left" style="flex: 1">
           <a-input v-model:value="query.keyword" placeholder="搜索设备编码/名称" allow-clear />
-          <a-select v-model:value="query.type" placeholder="设备类型" allow-clear style="width: 180px">
-            <a-select-option value="逆变器">逆变器</a-select-option>
-            <a-select-option value="汇流箱">汇流箱</a-select-option>
-            <a-select-option value="箱变">箱变</a-select-option>
-            <a-select-option value="配电柜">配电柜</a-select-option>
-          </a-select>
+          <a-select v-model:value="query.type" placeholder="设备类型" allow-clear style="width: 180px" :options="deviceTypeOptions" />
           <a-select v-model:value="query.status" placeholder="运行状态" allow-clear style="width: 180px">
             <a-select-option value="运行中">运行中</a-select-option>
             <a-select-option value="检修中">检修中</a-select-option>
@@ -442,13 +461,7 @@ async function handleImportFile(e) {
       <a-form layout="vertical">
         <a-form-item label="设备编码"><a-input v-model:value="formState.code" /></a-form-item>
         <a-form-item label="设备类型">
-          <a-select v-model:value="formState.type" placeholder="请选择设备类型">
-            <a-select-option value="逆变器">逆变器</a-select-option>
-            <a-select-option value="汇流箱">汇流箱</a-select-option>
-            <a-select-option value="箱变">箱变</a-select-option>
-            <a-select-option value="配电柜">配电柜</a-select-option>
-            <a-select-option value="其他设备">其他设备</a-select-option>
-          </a-select>
+          <a-select v-model:value="formState.type" placeholder="请选择设备类型" :options="deviceTypeOptions" />
         </a-form-item>
         <a-form-item label="设备名称"><a-input v-model:value="formState.name" /></a-form-item>
         <a-form-item label="型号"><a-input v-model:value="formState.model" /></a-form-item>

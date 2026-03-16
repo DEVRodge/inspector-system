@@ -15,3 +15,28 @@ export function getUsers(params) {
 export function getUserById(id) {
   return request({ url: `/user/${id}`, method: 'get' })
 }
+
+/**
+ * 新增用户
+ * @param {object} data - UserModifyParam: name, mobile, username, password?, enabled, organizationIds[], positionIds[], roleIds[]
+ */
+export function createUser(data) {
+  return request({ url: '/user', method: 'post', data })
+}
+
+/**
+ * 修改用户
+ * @param {number|string} id
+ * @param {object} data
+ */
+export function updateUser(id, data) {
+  return request({ url: `/user/${id}`, method: 'put', data })
+}
+
+/**
+ * 删除用户（软删除）
+ * @param {number|string} id
+ */
+export function deleteUser(id) {
+  return request({ url: `/user/${id}`, method: 'delete' })
+}

@@ -7,3 +7,11 @@ import { request } from '../http'
 export function getMenusCurrentTree(params = {}) {
   return request({ url: '/menus/current-tree', method: 'get', params })
 }
+
+/**
+ * 获取菜单列表（树形，按端类型筛选）
+ * @param {object} params - endType: 'WEB'|'APP', keyword?, enabled?
+ */
+export function getMenusTree(params = {}) {
+  return request({ url: '/menus', method: 'get', params })
+}

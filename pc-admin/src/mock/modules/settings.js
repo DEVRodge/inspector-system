@@ -1,8 +1,12 @@
+/** 设备类型字典，用于设备台账与巡检模板的设备类型维护 */
+export const DEVICE_TYPE_DICT_CODE = 'DEVICE_TYPE'
+
 export const dictionaryRows = [
-  { key: '1', category: '巡检结果状态', code: 'INSPECT_OK', label: '正常', status: '启用' },
-  { key: '2', category: '巡检结果状态', code: 'INSPECT_ABNORMAL', label: '异常', status: '启用' },
-  { key: '3', category: '设备状态', code: 'DEVICE_RUNNING', label: '运行中', status: '启用' },
-  { key: '4', category: '设备状态', code: 'DEVICE_MAINT', label: '检修中', status: '启用' },
+  { key: '1', category: DEVICE_TYPE_DICT_CODE, code: 'INVERTER', label: '逆变器', status: '启用' },
+  { key: '2', category: DEVICE_TYPE_DICT_CODE, code: 'COMBINER', label: '汇流箱', status: '启用' },
+  { key: '3', category: DEVICE_TYPE_DICT_CODE, code: 'TRANSFORMER', label: '箱变', status: '启用' },
+  { key: '4', category: DEVICE_TYPE_DICT_CODE, code: 'DISTRIBUTION', label: '配电柜', status: '启用' },
+  { key: '5', category: DEVICE_TYPE_DICT_CODE, code: 'OTHER', label: '其他设备', status: '启用' },
 ]
 
 export const permissionRows = [
