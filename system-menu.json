@@ -1,0 +1,14 @@
+{
+  "description": "光伏厂区设备巡检数字化系统 - 系统菜单",
+  "source": "pc-admin/src/constants/menu.js",
+  "menus": [
+    { "id": 1001, "parentId": null, "code": "dashboard", "name": "工作台", "icon": "DashboardOutlined", "path": "/dashboard", "sort": 1 },
+    { "id": 1002, "parentId": null, "code": "equipment", "name": "设备台账", "icon": "DatabaseOutlined", "path": "/equipment", "sort": 2 },
+    { "id": 1003, "parentId": null, "code": "templates", "name": "巡检模板", "icon": "FormOutlined", "path": "/templates", "sort": 3 },
+    { "id": 1004, "parentId": null, "code": "tasks", "name": "计划任务", "icon": "ScheduleOutlined", "path": "/tasks", "sort": 4 },
+    { "id": 1005, "parentId": null, "code": "records", "name": "巡检记录", "icon": "FileSearchOutlined", "path": "/records", "sort": 5 },
+    { "id": 1006, "parentId": null, "code": "exceptions", "name": "异常管理", "icon": "AlertOutlined", "path": "/exceptions", "sort": 6 },
+    { "id": 1007, "parentId": null, "code": "reports", "name": "统计报表", "icon": "BarChartOutlined", "path": "/reports", "sort": 7 },
+    { "id": 1008, "parentId": null, "code": "settings", "name": "系统管理", "icon": "SettingOutlined", "path": "/settings", "sort": 8 }
+  ]
+}
