@@ -138,7 +138,7 @@ onMounted(() => {
             <div v-for="item in dashboard.exceptionList.slice(0, 3)" :key="item.code" class="detail-list__item">
               <strong>#{{ item.code }} · {{ item.device }}</strong>
               <div>{{ item.desc }}</div>
-              <div class="subtle-text">处理人：{{ item.handler }} | 截止：{{ item.deadline }}</div>
+              <div class="subtle-text">处理人：{{ item.handler || '未指派' }}</div>
               <div style="margin-top: 8px">
                 <a-tag :color="getTagColor(item.status)">{{ item.status }}</a-tag>
               </div>

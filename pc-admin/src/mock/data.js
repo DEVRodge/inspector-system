@@ -194,9 +194,9 @@ export const recordRows = [
 ]
 
 export const exceptionRows = [
-  { key: '1', code: 'E20250912001', device: 'INV-A-002', desc: '运行指示异常闪烁', handler: '王工', deadline: '2025-09-12 18:00', status: '处理中', recordId: '2' },
-  { key: '2', code: 'E20250912002', device: 'INV-B-001', desc: '油位偏低', handler: '李四', deadline: '2025-09-13 12:00', status: '待处理', recordId: '4' },
-  { key: '3', code: 'E20250911008', device: 'INV-C-005', desc: '环境卫生不达标', handler: '赵班长', deadline: '2025-09-12 17:00', status: '已处理', recordId: '5' },
+  { key: '1', code: 'E20250912001', device: 'INV-A-002', deviceName: 'A区2号逆变器', desc: '运行指示异常闪烁', handler: '王工', status: '处理中', recordId: '2' },
+  { key: '2', code: 'E20250912002', device: 'INV-B-001', deviceName: 'B区1号逆变器', desc: '油位偏低', handler: '', status: '待处理', recordId: '4' },
+  { key: '3', code: 'E20250911008', device: 'INV-C-005', deviceName: 'C区5号逆变器', desc: '环境卫生不达标', handler: '赵班长', status: '已处理', recordId: '5' },
 ]
 
 export const reportStats = [

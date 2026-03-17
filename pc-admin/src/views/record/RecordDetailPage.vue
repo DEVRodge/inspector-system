@@ -3,14 +3,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { recordRows, equipmentRows } from '../../mock/data'
+import { getRecordById } from '../../api/modules/inspection'
+import { isMockEnabled } from '../../api/http'
 
 const route = useRoute()
 const router = useRouter()
-
-const record = computed(() => {
-  const id = route.params.id
-  return recordRows.find((r) => String(r.key) === String(id)) ?? null
-})
+const record = ref(null)
+const loading = ref(false)
 
 function getDeviceType(deviceCode) {
   const eq = equipmentRows.find((e) => e.code === deviceCode)
@@ -45,7 +44,21 @@ function collapseAll() {
   activeKeys.value = []
 }
 
-onMounted(() => {
+onMounted(async () => {
+  const id = route.params.id
+  if (isMockEnabled) {
+    record.value = recordRows.find((r) => String(r.key) === String(id)) ?? null
+  } else {
+    loading.value = true
+    try {
+      record.value = await getRecordById(id)
+    } catch {
+      message.error('加载记录失败')
+      record.value = null
+    } finally {
+      loading.value = false
+    }
+  }
   if (!record.value) {
     message.warning('记录不存在')
     goBack()
@@ -68,6 +81,7 @@ function goBack() {
       </div>
     </div>
 
+    <a-spin :spinning="loading">
     <a-card v-if="record" :bordered="false">
       <a-descriptions :column="1" bordered size="small" class="detail-section">
         <a-descriptions-item label="任务名称">{{ record.plan }}</a-descriptions-item>
@@ -136,6 +150,7 @@ function goBack() {
         </a-collapse>
       </div>
     </a-card>
+    </a-spin>
   </div>
 </template>
 

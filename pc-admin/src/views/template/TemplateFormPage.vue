@@ -63,7 +63,7 @@ function fillForm(record) {
 onMounted(async () => {
   await loadDeviceTypes()
   if (isEdit.value && route.params.id) {
-    const record = templateStore.getById(route.params.id)
+    const record = await templateStore.getById(route.params.id)
     if (record) fillForm(record)
     else message.warning('模板不存在')
   } else {
@@ -75,7 +75,7 @@ function goBack() {
   router.push('/templates')
 }
 
-function submit() {
+async function submit() {
   if (!formState.name?.trim()) {
     message.warning('请填写模板名称')
     return
@@ -93,36 +93,40 @@ function submit() {
     status: formState.status ?? '草稿',
   }
 
-  if (isEdit.value && route.params.id) {
-    const record = templateStore.getById(route.params.id)
-    if (!record) {
-      message.warning('模板不存在')
-      return
+  try {
+    if (isEdit.value && route.params.id) {
+      const record = await templateStore.getById(route.params.id)
+      if (!record) {
+        message.warning('模板不存在')
+        return
+      }
+      const other = templateStore.list.find(
+        (t) => String(t.key) !== String(route.params.id) && t.deviceType === formState.deviceType,
+      )
+      if (other) {
+        message.warning('该设备类型已有关联模板，一种设备类型仅能关联一个模板')
+        return
+      }
+      await templateStore.update(route.params.id, {
+        ...basicPayload,
+        items: record.items ?? [],
+      })
+      message.success('模板已更新')
+    } else {
+      if (templateStore.list.some((t) => t.deviceType === formState.deviceType)) {
+        message.warning('该设备类型已有关联模板，一种设备类型仅能关联一个模板')
+        return
+      }
+      await templateStore.create({
+        ...basicPayload,
+        items: [],
+      })
+      message.success('模板已新增')
     }
-    const other = templateStore.list.find(
-      (t) => t.key !== route.params.id && t.deviceType === formState.deviceType,
-    )
-    if (other) {
-      message.warning('该设备类型已有关联模板，一种设备类型仅能关联一个模板')
-      return
-    }
-    templateStore.update(route.params.id, {
-      ...basicPayload,
-      items: record.items ?? [],
-    })
-    message.success('模板已更新')
-  } else {
-    if (templateStore.list.some((t) => t.deviceType === formState.deviceType)) {
-      message.warning('该设备类型已有关联模板，一种设备类型仅能关联一个模板')
-      return
-    }
-    templateStore.create({
-      ...basicPayload,
-      items: [],
-    })
-    message.success('模板已新增')
+    router.push('/templates')
+  } catch {
+    message.error('保存失败，请稍后重试')
   }
-  router.push('/templates')
 }
 </script>
 

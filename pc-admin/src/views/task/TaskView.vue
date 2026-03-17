@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -9,14 +9,40 @@ import {
   getDevicesByKeys,
 } from '@/mock/modules/task'
 import { useTaskStore } from '@/stores/task'
+import { isMockEnabled } from '@/api/http'
 
 const router = useRouter()
 const taskStore = useTaskStore()
 
+const loading = ref(false)
 const query = reactive({
   cycle: undefined,
   status: undefined,
 })
+
+async function loadList() {
+  if (isMockEnabled) {
+    await taskStore.loadList()
+    return
+  }
+  loading.value = true
+  try {
+    await taskStore.loadList({
+      cycle: query.cycle,
+      status: query.status,
+      pageNumber: 1,
+      pageSize: 999,
+    })
+  } catch {
+    message.error('加载任务列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function onQuerySearch() {
+  loadList()
+}
 
 function formatPeriodTime(r) {
   if (r.cycle === 'once') return r.executeAt ?? '-'
@@ -34,6 +60,16 @@ function formatPeriodTime(r) {
   if (r.cycle === 'yearly') return `每年 ${r.time ?? ''}`
   return r.time ?? '-'
 }
+
+const deviceListForDrawer = ref([])
+
+const getDevicesForCurrentRow = computed(() => {
+  const row = currentRow.value
+  if (!row) return []
+  const keys = row.deviceKeys ?? row.deviceIds ?? []
+  if (isMockEnabled) return getDevicesByKeys(keys)
+  return deviceListForDrawer.value.filter((e) => keys.includes(String(e.key ?? e.id)))
+})
 
 const rows = computed(() =>
   taskStore.list.map((r) => ({
@@ -55,13 +91,23 @@ const filteredRows = computed(() =>
 const detailVisible = ref(false)
 const currentRow = ref(null)
 
+onMounted(() => loadList())
+
 function openCreate() {
   router.push('/tasks/new')
 }
 
-function openDetail(record) {
+async function openDetail(record) {
   currentRow.value = record
   detailVisible.value = true
+  if (!isMockEnabled) {
+    try {
+      const res = await import('@/api/modules/equipment').then((m) => m.getDevicePage({ pageNumber: 1, pageSize: 999 }))
+      deviceListForDrawer.value = res?.list ?? []
+    } catch {
+      deviceListForDrawer.value = []
+    }
+  }
 }
 
 function openEdit(record) {
@@ -71,9 +117,14 @@ function openEdit(record) {
 function removeRow(record) {
   Modal.confirm({
     title: `确认删除任务「${record.plan}」吗？`,
-    onOk() {
-      taskStore.remove(record.key)
-      message.success('任务已删除')
+    async onOk() {
+      try {
+        const id = record.id ?? record.key
+        await taskStore.remove(id)
+        message.success('任务已删除')
+      } catch {
+        message.error('删除失败，请稍后重试')
+      }
     },
   })
 }
@@ -111,9 +162,10 @@ function removeRow(record) {
             {{ s.label }}
           </a-select-option>
         </a-select>
+        <a-button v-if="!isMockEnabled" type="primary" @click="onQuerySearch">查询</a-button>
       </div>
 
-      <a-table :data-source="filteredRows" :pagination="false" row-key="key">
+      <a-table :data-source="filteredRows" :loading="loading" :pagination="false" row-key="key">
         <a-table-column title="任务名称" data-index="plan" key="plan" />
         <a-table-column title="执行周期" data-index="cycleLabel" key="cycleLabel" width="100" />
         <a-table-column title="责任部门" data-index="team" key="team" width="110" />
@@ -145,9 +197,9 @@ function removeRow(record) {
           <a-descriptions-item label="状态">{{ currentRow.status }}</a-descriptions-item>
         </a-descriptions>
         <div class="drawer-section">
-          <div class="drawer-section__title">包含设备（{{ currentRow.deviceKeys?.length ?? 0 }} 台）</div>
+          <div class="drawer-section__title">包含设备（{{ (currentRow.deviceKeys ?? currentRow.deviceIds)?.length ?? 0 }} 台）</div>
           <a-table
-            :data-source="getDevicesByKeys(currentRow.deviceKeys)"
+            :data-source="getDevicesForCurrentRow"
             :pagination="false"
             row-key="key"
             size="small"

@@ -3,8 +3,9 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { getDepartments } from '@/api/modules/equipment'
+import { getDepartments, getDevicePage } from '@/api/modules/equipment'
 import { orgRows } from '@/mock/data'
+import { isMockEnabled } from '@/api/http'
 import { useTaskStore } from '@/stores/task'
 import { formToCron, cronToForm } from '@/utils/cron'
 import {
@@ -50,15 +51,17 @@ function formatPeriodTime(r) {
   return r.time ?? '-'
 }
 
+const allDevices = ref([])
+
 const equipmentTypes = computed(() => {
-  const set = new Set(equipmentRows.map((e) => e.type))
+  const set = new Set(allDevices.value.map((e) => e.type))
   return Array.from(set)
 })
 
 const selectedType = ref(null)
 const devicesOfType = computed(() => {
   if (!selectedType.value) return []
-  return equipmentRows.filter((e) => e.type === selectedType.value)
+  return allDevices.value.filter((e) => e.type === selectedType.value)
 })
 
 const selectedRowKeys = computed(() => {
@@ -73,7 +76,11 @@ function onDeviceSelectionChange(keys) {
   formState.deviceKeys = [...otherKeys, ...keys]
 }
 
-const selectedDevices = computed(() => getDevicesByKeys(formState.deviceKeys))
+const selectedDevices = computed(() => {
+  const keys = formState.deviceKeys
+  if (isMockEnabled) return getDevicesByKeys(keys)
+  return allDevices.value.filter((e) => keys.includes(String(e.key ?? e.id)))
+})
 
 const departmentOptions = ref([])
 const inspectorOptions = computed(() => {
@@ -129,7 +136,7 @@ function fillForm(record) {
       team: record.team ?? '',
       inspector: record.inspector ?? record.owner ?? '',
       status: record.status ?? '待执行',
-      deviceKeys: [...(record.deviceKeys ?? [])],
+      deviceKeys: [...(record.deviceKeys ?? record.deviceIds ?? [])],
     })
   } else {
     Object.assign(formState, {
@@ -147,10 +154,23 @@ function fillForm(record) {
   }
 }
 
+async function loadDevices() {
+  if (isMockEnabled) {
+    allDevices.value = equipmentRows
+    return
+  }
+  try {
+    const res = await getDevicePage({ pageNumber: 1, pageSize: 999 })
+    allDevices.value = res?.list ?? []
+  } catch {
+    allDevices.value = []
+  }
+}
+
 onMounted(async () => {
-  await loadDepartments()
+  await Promise.all([loadDepartments(), loadDevices()])
   if (isEdit.value && route.params.id) {
-    const record = taskStore.getById(route.params.id)
+    const record = await taskStore.getById(route.params.id)
     if (record) fillForm(record)
     else message.warning('任务不存在')
   } else {
@@ -217,15 +237,18 @@ function submit() {
       : formatPeriodTime(formState),
   }
 
-  if (isEdit.value && route.params.id) {
-    taskStore.update(route.params.id, payload)
-    message.success('任务已更新')
-  } else {
-    payload.key = `${Date.now()}`
-    taskStore.create(payload)
-    message.success('任务已创建')
+  try {
+    if (isEdit.value && route.params.id) {
+      await taskStore.update(route.params.id, payload)
+      message.success('任务已更新')
+    } else {
+      await taskStore.create(payload)
+      message.success('任务已创建')
+    }
+    router.push('/tasks')
+  } catch {
+    message.error('保存失败，请稍后重试')
   }
-  router.push('/tasks')
 }
 </script>
 

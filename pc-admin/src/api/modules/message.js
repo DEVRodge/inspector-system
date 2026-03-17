@@ -10,6 +10,9 @@ export function getUnreadTotal(channelType = DEFAULT_CHANNEL) {
   return request({
     url: `/msg-record/un-read/total/${channelType}`,
     method: 'get',
+  }).then((res) => {
+    if (typeof res === 'number') return res
+    return res?.data ?? res?.total ?? res ?? 0
   })
 }
 
@@ -61,6 +64,10 @@ export function getMessageList(params = {}) {
       channelType,
       ...rest,
     },
+  }).then((data) => {
+    const list = data?.records ?? data?.list ?? []
+    const total = data?.total ?? 0
+    return { records: list, total }
   })
 }
 
@@ -87,7 +94,7 @@ export function readBatch(ids) {
   return request({
     url: '/msg-record/read-batch',
     method: 'put',
-    data: ids,
+    data: ids.map((id) => Number(id)),
   })
 }
 

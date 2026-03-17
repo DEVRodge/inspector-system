@@ -33,7 +33,31 @@ async function loadDeviceTypes() {
   }
 }
 
-onMounted(() => loadDeviceTypes())
+const loading = ref(false)
+
+async function loadList() {
+  if (isMockEnabled) {
+    await templateStore.loadList()
+    return
+  }
+  loading.value = true
+  try {
+    await templateStore.loadList({
+      deviceType: query.deviceType,
+      pageNumber: 1,
+      pageSize: 999,
+    })
+  } catch {
+    message.error('加载模板列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadDeviceTypes()
+  loadList()
+})
 const rows = computed(() => templateStore.list)
 const filteredRows = computed(() =>
   rows.value.filter((r) => !query.deviceType || r.deviceType === query.deviceType),
@@ -62,14 +86,19 @@ function openItemConfig(record) {
   itemModalOpen.value = true
 }
 
-function onItemsUpdate(newItems) {
+async function onItemsUpdate(newItems) {
   if (!configTarget.value) return
-  templateStore.update(configTarget.value.key, {
-    ...configTarget.value,
-    items: newItems ?? [],
-  })
-  itemModalOpen.value = false
-  configTarget.value = null
+  const id = configTarget.value.id ?? configTarget.value.key
+  try {
+    await templateStore.update(id, {
+      ...configTarget.value,
+      items: newItems ?? [],
+    })
+    itemModalOpen.value = false
+    configTarget.value = null
+  } catch {
+    message.error('保存巡检项失败')
+  }
 }
 
 function getTypeLabel(type) {
@@ -91,9 +120,14 @@ function removeRow(record) {
   Modal.confirm({
     title: `确认删除模板「${record.name}」吗？`,
     content: '删除后该设备类型将无关联模板。',
-    onOk() {
-      templateStore.remove(record.key)
-      message.success('模板已删除')
+    async onOk() {
+      try {
+        const id = record.id ?? record.key
+        await templateStore.remove(id)
+        message.success('模板已删除')
+      } catch {
+        message.error('删除失败，请稍后重试')
+      }
     },
   })
 }
@@ -119,7 +153,7 @@ function removeRow(record) {
           :options="deviceTypeOptions"
         />
       </div>
-      <a-table :data-source="filteredRows" :pagination="false" row-key="key">
+      <a-table :data-source="filteredRows" :loading="loading" :pagination="false" row-key="key">
         <a-table-column title="模板名称" data-index="name" key="name" />
         <a-table-column title="设备类型" data-index="deviceType" key="deviceType" width="120" />
         <a-table-column title="巡检项数" data-index="itemCount" key="itemCount" width="100" />

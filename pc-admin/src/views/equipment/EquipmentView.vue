@@ -3,10 +3,14 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import QRCode from 'qrcode'
 import {
+  createDevice,
+  deleteDevice,
   exportExcel,
   exportTemplate,
   getDepartments,
+  getDevicePage,
   importEquipment,
+  updateDevice,
 } from '../../api/modules/equipment'
 import { getDictionaryList } from '../../api/modules/dictionary'
 import { DEVICE_TYPE_DICT_CODE, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
@@ -19,7 +23,13 @@ const query = reactive({
   status: undefined,
 })
 
-const rows = ref([...equipmentRows])
+const rows = ref([])
+const loading = ref(false)
+const pagination = reactive({
+  current: 1,
+  pageSize: 20,
+  total: 0,
+})
 const detailVisible = ref(false)
 const formVisible = ref(false)
 const qrcodeVisible = ref(false)
@@ -38,17 +48,53 @@ const formState = reactive({
   status: '运行中',
 })
 
-const filteredRows = computed(() =>
-  rows.value.filter((item) => {
-    const keywordMatch =
-      !query.keyword ||
-      item.code.toLowerCase().includes(query.keyword.toLowerCase()) ||
-      item.name.toLowerCase().includes(query.keyword.toLowerCase())
-    const typeMatch = !query.type || item.type === query.type
-    const statusMatch = !query.status || item.status === query.status
-    return keywordMatch && typeMatch && statusMatch
-  }),
-)
+const filteredRows = computed(() => {
+  if (isMockEnabled) {
+    return rows.value.filter((item) => {
+      const keywordMatch =
+        !query.keyword ||
+        item.code?.toLowerCase().includes(query.keyword.toLowerCase()) ||
+        item.name?.toLowerCase().includes(query.keyword.toLowerCase())
+      const typeMatch = !query.type || item.type === query.type
+      const statusMatch = !query.status || item.status === query.status
+      return keywordMatch && typeMatch && statusMatch
+    })
+  }
+  return rows.value
+})
+
+async function loadList() {
+  if (isMockEnabled) {
+    rows.value = equipmentRows.map((r) => ({ ...r, key: r.key ?? r.id }))
+    pagination.total = rows.value.length
+    return
+  }
+  loading.value = true
+  try {
+    const res = await getDevicePage({
+      pageNumber: pagination.current,
+      pageSize: pagination.pageSize,
+      keyword: query.keyword || undefined,
+      type: query.type,
+      status: query.status,
+    })
+    rows.value = res?.list ?? []
+    pagination.total = res?.total ?? 0
+  } catch {
+    rows.value = []
+    message.error('加载设备列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function onTableChange(pag) {
+  if (pag && typeof pag.current === 'number') {
+    pagination.current = pag.current
+    pagination.pageSize = pag.pageSize ?? pagination.pageSize
+    loadList()
+  }
+}
 
 function fillForm(record) {
   Object.assign(formState, record || {
@@ -86,7 +132,10 @@ async function loadDeviceTypes() {
   }
 }
 
-onMounted(() => loadDeviceTypes())
+onMounted(() => {
+  loadDeviceTypes()
+  loadList()
+})
 
 async function openCreate() {
   currentRow.value = null
@@ -119,19 +168,55 @@ async function openEdit(record) {
   await Promise.all([loadDepartments(), loadDeviceTypes()])
 }
 
-function saveRow() {
+async function saveRow() {
   if (!formState.code || !formState.name || !formState.type) {
     message.warning('请先填写设备编码、设备类型和设备名称')
     return
   }
 
+  const payload = {
+    code: formState.code,
+    name: formState.name,
+    type: formState.type,
+    model: formState.model,
+    voltage: formState.voltage,
+    location: formState.location,
+    team: formState.team,
+    date: formState.date,
+    status: formState.status,
+  }
+
   if (currentRow.value) {
-    const index = rows.value.findIndex((item) => item.key === currentRow.value.key)
-    rows.value[index] = { ...formState }
-    message.success('设备信息已更新')
+    const id = currentRow.value.id ?? currentRow.value.key
+    if (isMockEnabled) {
+      const index = rows.value.findIndex((item) => (item.key ?? item.id) === id)
+      if (index >= 0) rows.value[index] = { ...formState, key: id }
+      message.success('设备信息已更新')
+    } else {
+      try {
+        await updateDevice(id, payload)
+        message.success('设备信息已更新')
+        loadList()
+      } catch {
+        message.error('更新失败，请稍后重试')
+        return
+      }
+    }
   } else {
-    rows.value.unshift({ ...formState, key: `${Date.now()}` })
-    message.success('设备已新增')
+    if (isMockEnabled) {
+      rows.value.unshift({ ...formState, key: `${Date.now()}` })
+      message.success('设备已新增')
+    } else {
+      try {
+        await createDevice(payload)
+        message.success('设备已新增')
+        formVisible.value = false
+        loadList()
+      } catch {
+        message.error('新增失败，请稍后重试')
+        return
+      }
+    }
   }
 
   formVisible.value = false
@@ -140,10 +225,21 @@ function saveRow() {
 function removeRow(record) {
   Modal.confirm({
     title: `确认删除设备 ${record.code} 吗？`,
-    content: '当前为静态演示，删除只影响前端页面展示。',
-    onOk() {
-      rows.value = rows.value.filter((item) => item.key !== record.key)
-      message.success('设备已删除')
+    content: isMockEnabled ? '当前为静态演示，删除只影响前端页面展示。' : '删除后不可恢复。',
+    async onOk() {
+      const id = record.id ?? record.key
+      if (isMockEnabled) {
+        rows.value = rows.value.filter((item) => (item.key ?? item.id) !== id)
+        message.success('设备已删除')
+      } else {
+        try {
+          await deleteDevice(id)
+          message.success('设备已删除')
+          loadList()
+        } catch {
+          message.error('删除失败，请稍后重试')
+        }
+      }
     },
   })
 }
@@ -328,7 +424,7 @@ async function handleImportFile(e) {
     const data = res?.data ?? res
     if (data?.success && data?.count > 0) {
       message.success(`成功导入 ${data.count} 条设备`)
-      // 导入成功后需由后端列表接口刷新数据，此处仅提示
+      if (!isMockEnabled) loadList()
     } else if (data?.errors?.length) {
       Modal.warning({
         title: '部分行导入失败',
@@ -377,10 +473,17 @@ async function handleImportFile(e) {
             <a-select-option value="检修中">检修中</a-select-option>
             <a-select-option value="停用">停用</a-select-option>
           </a-select>
+          <a-button v-if="!isMockEnabled" type="primary" @click="() => { pagination.current = 1; loadList() }">查询</a-button>
         </div>
       </div>
 
-      <a-table :data-source="filteredRows" row-key="key">
+      <a-table
+        :data-source="filteredRows"
+        :loading="loading"
+        :pagination="isMockEnabled ? false : { ...pagination, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }"
+        row-key="key"
+        @change="onTableChange"
+      >
         <a-table-column title="设备编码" data-index="code" key="code" width="130" />
         <a-table-column title="设备类型" data-index="type" key="type" width="110" />
         <a-table-column title="设备名称" data-index="name" key="name" />
