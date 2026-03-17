@@ -3,25 +3,21 @@ const periodMap = {
     labels: ['03-07', '03-08', '03-09', '03-10', '03-11', '03-12', '03-13'],
     completionRate: [91, 93, 95, 94, 96, 97, 96],
     exceptionCount: [8, 6, 7, 5, 6, 4, 5],
-    timelyRate: [86, 89, 90, 91, 93, 92, 94],
   },
   month: {
     labels: ['第1周', '第2周', '第3周', '第4周'],
     completionRate: [92, 95, 97, 96],
     exceptionCount: [34, 28, 22, 27],
-    timelyRate: [87, 90, 92, 91],
   },
   quarter: {
     labels: ['1 月', '2 月', '3 月'],
     completionRate: [90, 94, 96],
     exceptionCount: [42, 35, 27],
-    timelyRate: [85, 89, 91],
   },
   year: {
     labels: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
     completionRate: [88, 90, 91, 92, 93, 94, 95, 94, 95, 96, 96, 96.2],
     exceptionCount: [32, 28, 30, 26, 25, 24, 22, 24, 23, 27, 26, 27],
-    timelyRate: [82, 85, 86, 88, 89, 90, 91, 91, 92, 91, 91.4, 91.4],
   },
 }
 
@@ -72,9 +68,8 @@ export function getReportMockData(period = 'month') {
   return {
     activePeriod: period,
     stats: [
-      { key: 'completion', title: '巡检完成率', value: 96.2, suffix: '%', diff: '+2.4%' },
-      { key: 'exceptions', title: '异常数量', value: 27, suffix: '条', diff: '-5 条' },
-      { key: 'timely', title: '异常处理及时率', value: 91.4, suffix: '%', diff: '+3.1%' },
+      { key: 'completion', title: '巡检完成率', value: 96.2, suffix: '%', diff: '+2.4%', formula: '巡检完成率 = 已完成任务数 / 应执行任务数 × 100%' },
+      { key: 'exceptions', title: '异常数量', value: 27, suffix: '条', diff: '-5 条', formula: '异常数量 = 统计周期内产生的异常记录数' },
     ],
     trend,
     personWorkload,

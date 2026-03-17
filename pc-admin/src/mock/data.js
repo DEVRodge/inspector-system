@@ -203,7 +203,6 @@ export const reportStats = [
   { title: '巡检完成率', value: '96.2%' },
   { title: '漏检率', value: '1.8%' },
   { title: '异常数量', value: '27 条' },
-  { title: '整改及时率', value: '91.4%' },
 ]
 
 export const settingGroups = [

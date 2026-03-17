@@ -234,6 +234,20 @@ a {
   font-size: 13px;
 }
 
+.metric-card__formula {
+  margin-top: 6px;
+  color: #86909c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.summary-grid__formula {
+  margin-top: 4px;
+  color: #86909c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .dashboard-split {
   display: grid;
   grid-template-columns: 1.2fr 1fr;

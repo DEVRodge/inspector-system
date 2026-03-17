@@ -101,6 +101,7 @@ onMounted(() => {
         <a-card v-for="item in dashboard.overviewCards" :key="item.key" class="metric-card" :bordered="false">
           <a-statistic :title="item.title" :value="item.value" :suffix="item.suffix" />
           <div class="metric-card__footer">{{ item.trend }}</div>
+          <div v-if="item.formula" class="metric-card__formula">{{ item.formula }}</div>
         </a-card>
       </div>
 
@@ -110,26 +111,23 @@ onMounted(() => {
             <div class="summary-grid__item">
               <span>已完成任务</span>
               <strong>{{ dashboard.completionSummary.completedTasks || 0 }}</strong>
+              <div class="summary-grid__formula">已完成任务 = 当日已提交巡检记录的任务数</div>
             </div>
             <div class="summary-grid__item">
               <span>应执行任务</span>
               <strong>{{ dashboard.completionSummary.plannedTasks || 0 }}</strong>
+              <div class="summary-grid__formula">应执行任务 = 当日应执行的任务总数</div>
             </div>
             <div class="summary-grid__item">
               <span>待处理异常</span>
               <strong>{{ dashboard.completionSummary.pendingExceptions || 0 }}</strong>
-            </div>
-            <div class="summary-grid__item">
-              <span>整改及时率</span>
-              <strong>{{ dashboard.completionSummary.closedLoopRate || 0 }}%</strong>
+              <div class="summary-grid__formula">待处理异常 = 待处理状态的异常条数</div>
             </div>
           </div>
           <div style="margin-top: 16px">
             <div class="subtle-label">总体完成进度</div>
             <a-progress :percent="completionPercent" status="active" />
-            <div class="subtle-text">
-              逾期任务 {{ dashboard.completionSummary.overdueTasks || 0 }} 项，建议优先调度部门复核。
-            </div>
+            <div class="summary-grid__formula" style="margin-top: 8px">总体完成进度 = 已完成任务 / 应执行任务 × 100%</div>
           </div>
         </a-card>
 

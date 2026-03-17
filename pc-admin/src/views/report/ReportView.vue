@@ -24,7 +24,6 @@ const report = ref({
     labels: [],
     completionRate: [],
     exceptionCount: [],
-    timelyRate: [],
   },
   personWorkload: [],
   exceptionDistribution: [],
@@ -56,13 +55,6 @@ const trendChartOption = computed(() => ({
       data: report.value.trend.completionRate,
       itemStyle: { color: '#1677ff' },
       areaStyle: { color: 'rgba(22, 119, 255, 0.12)' },
-    },
-    {
-      name: '异常处理及时率',
-      type: 'line',
-      smooth: true,
-      data: report.value.trend.timelyRate,
-      itemStyle: { color: '#52c41a' },
     },
     {
       name: '异常数量',
@@ -209,7 +201,7 @@ onMounted(() => {
     <div class="page-header">
       <div class="page-header__meta">
         <h2>统计报表</h2>
-        <p>聚焦 P0 指标，展示完成率、异常数量、异常处理及时率及人员工作量趋势。</p>
+        <p>聚焦 P0 指标，展示完成率、异常数量及人员工作量趋势。</p>
       </div>
       <a-space>
         <a-radio-group v-model:value="activePeriod" button-style="solid">
@@ -227,6 +219,7 @@ onMounted(() => {
           <a-card v-for="item in report.stats" :key="item.key" :bordered="false" class="metric-card">
             <a-statistic :title="item.title" :value="item.value" :suffix="item.suffix" />
             <div class="metric-card__footer">较上期 {{ item.diff }}</div>
+            <div v-if="item.formula" class="metric-card__formula">{{ item.formula }}</div>
           </a-card>
         </div>
 
@@ -234,7 +227,7 @@ onMounted(() => {
           <a-card title="完成率与异常数量趋势" :bordered="false">
             <BaseChart :option="trendChartOption" height="280px" />
             <div class="formula-note">
-              计算公式：巡检完成率 = 已完成任务数 / 应执行任务数；异常处理及时率 = 在规定时间内闭环的异常数量 / 异常总数；异常数量 = 统计周期内产生的异常记录数。
+              计算公式：巡检完成率 = 已完成任务数 / 应执行任务数；异常数量 = 统计周期内产生的异常记录数。
             </div>
           </a-card>
           <a-card title="异常状态统计" :bordered="false">

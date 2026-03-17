@@ -8,7 +8,7 @@ const overviewCards = [
     value: 286,
     suffix: '台',
     trend: '较上月 +12 台',
-    detail: '运行中设备占比 92.3%',
+    formula: '设备总数 = 设备台账总数',
   },
   {
     key: 'todayTasks',
@@ -16,7 +16,7 @@ const overviewCards = [
     value: 64,
     suffix: '项',
     trend: '已完成 46 项',
-    detail: '其中临时任务 6 项',
+    formula: '今日应执行任务 = 当日应执行的任务数量',
   },
   {
     key: 'exceptions',
@@ -24,7 +24,7 @@ const overviewCards = [
     value: 9,
     suffix: '条',
     trend: '待指派 2 条',
-    detail: '较昨日减少 3 条',
+    formula: '待处理异常 = 待处理状态的异常条数',
   },
   {
     key: 'completionRate',
@@ -32,7 +32,7 @@ const overviewCards = [
     value: 96.2,
     suffix: '%',
     trend: '同比提升 4.3%',
-    detail: '漏检率控制在 1.8%',
+    formula: '本月完成率 = 本月已完成任务数 / 本月应执行任务数 × 100%',
   },
 ]
 
@@ -59,7 +59,7 @@ const personLoads = [
 const recentNotices = [
   {
     key: '1',
-    title: '3 条异常将在 4 小时内超期',
+    title: '待处理异常需优先指派',
     desc: '建议优先处理待处理异常与重复故障设备。',
   },
   {
@@ -81,8 +81,6 @@ export function getDashboardMockData() {
       completedTasks: 46,
       plannedTasks: 64,
       pendingExceptions: 9,
-      overdueTasks: 4,
-      closedLoopRate: 91.4,
     },
     taskDistribution,
     deviceStatusDistribution,
