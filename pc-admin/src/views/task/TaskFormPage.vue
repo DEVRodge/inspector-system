@@ -28,7 +28,7 @@ const formState = reactive({
   cycleExtra: {},
   executeAt: null,
   team: '',
-  owner: '',
+  inspector: '',
   status: '待执行',
   deviceKeys: [],
 })
@@ -76,7 +76,7 @@ function onDeviceSelectionChange(keys) {
 const selectedDevices = computed(() => getDevicesByKeys(formState.deviceKeys))
 
 const departmentOptions = ref([])
-const ownerOptions = computed(() => {
+const inspectorOptions = computed(() => {
   const dept = formState.team
   const list = dept ? orgRows.filter((r) => r.dept === dept) : orgRows
   return list.map((r) => ({ value: r.name, label: `${r.name}（${r.dept}）` }))
@@ -127,7 +127,7 @@ function fillForm(record) {
       cycleExtra,
       executeAt: record.executeAt ? dayjs(record.executeAt) : null,
       team: record.team ?? '',
-      owner: record.owner ?? '',
+      inspector: record.inspector ?? record.owner ?? '',
       status: record.status ?? '待执行',
       deviceKeys: [...(record.deviceKeys ?? [])],
     })
@@ -140,7 +140,7 @@ function fillForm(record) {
       cycleExtra: {},
       executeAt: null,
       team: '',
-      owner: '',
+      inspector: '',
       status: '待执行',
       deviceKeys: [],
     })
@@ -175,8 +175,8 @@ function submit() {
     message.warning('请选择责任部门')
     return
   }
-  if (!formState.owner) {
-    message.warning('请选择责任人')
+  if (!formState.inspector) {
+    message.warning('请选择巡检人')
     return
   }
   if (formState.cycle !== 'once') {
@@ -207,7 +207,7 @@ function submit() {
     executeAt: formState.executeAt ? dayjs(formState.executeAt).format('YYYY-MM-DD HH:mm') : null,
     cron,
     team: formState.team,
-    owner: formState.owner,
+    inspector: formState.inspector,
     status: formState.status,
     deviceKeys,
     devices: deviceKeys.length,
@@ -364,11 +364,11 @@ function submit() {
             style="width: 100%"
           />
         </a-form-item>
-        <a-form-item label="责任人" required>
+        <a-form-item label="巡检人" required>
           <a-select
-            v-model:value="formState.owner"
-            placeholder="请选择责任人"
-            :options="ownerOptions"
+            v-model:value="formState.inspector"
+            placeholder="请选择巡检人"
+            :options="inspectorOptions"
             style="width: 100%"
           />
         </a-form-item>

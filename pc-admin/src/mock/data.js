@@ -29,9 +29,9 @@ export const qrcodeRows = [
 export { taskRows } from './modules/task'
 
 export const recordRows = [
-  { key: '1', device: 'INV-A-001', inspector: '张三', scanTime: '2025-09-12 08:11', submitTime: '2025-09-12 08:15', result: '正常', photos: 2 },
-  { key: '2', device: 'INV-A-002', inspector: '张三', scanTime: '2025-09-12 08:23', submitTime: '2025-09-12 08:31', result: '异常', photos: 3 },
-  { key: '3', device: 'INV-B-001', inspector: '李四', scanTime: '2025-09-12 09:02', submitTime: '2025-09-12 09:08', result: '正常', photos: 1 },
+  { key: '1', device: 'INV-A-001', plan: 'A 区逆变器日检', inspector: '张三', scanTime: '2025-09-12 08:11', submitTime: '2025-09-12 08:15', result: '正常', photos: 2 },
+  { key: '2', device: 'INV-A-002', plan: 'A 区逆变器日检', inspector: '张三', scanTime: '2025-09-12 08:23', submitTime: '2025-09-12 08:31', result: '异常', photos: 3 },
+  { key: '3', device: 'INV-B-001', plan: 'B 区逆变器日检', inspector: '李四', scanTime: '2025-09-12 09:02', submitTime: '2025-09-12 09:08', result: '正常', photos: 1 },
 ]
 
 export const exceptionRows = [

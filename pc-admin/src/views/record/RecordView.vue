@@ -27,16 +27,18 @@ function openDetail(record) {
     <a-card :bordered="false">
       <div class="table-toolbar">
         <div class="table-toolbar__left" style="flex: 1">
+          <a-input placeholder="任务名称" allow-clear />
           <a-input placeholder="设备编码" allow-clear />
-          <a-input placeholder="巡检人员" allow-clear />
+          <a-input placeholder="巡检人" allow-clear />
           <a-select placeholder="结果状态" allow-clear style="width: 160px" />
           <a-range-picker style="width: 280px" />
         </div>
       </div>
 
       <a-table :data-source="rows" row-key="key">
-        <a-table-column title="设备编码" data-index="device" key="device" />
-        <a-table-column title="巡检人员" data-index="inspector" key="inspector" width="100" />
+        <a-table-column title="任务名称" data-index="plan" key="plan" width="140" />
+        <a-table-column title="设备编码" data-index="device" key="device" width="120" />
+        <a-table-column title="巡检人" data-index="inspector" key="inspector" width="100" />
         <a-table-column title="扫码时间" data-index="scanTime" key="scanTime" width="170" />
         <a-table-column title="提交时间" data-index="submitTime" key="submitTime" width="170" />
         <a-table-column title="结果" data-index="result" key="result" width="100" />
@@ -51,8 +53,9 @@ function openDetail(record) {
 
     <a-drawer v-model:open="detailVisible" title="巡检记录详情" width="520">
       <a-descriptions v-if="currentRow" :column="1" bordered size="small" class="drawer-section">
+        <a-descriptions-item label="任务名称">{{ currentRow.plan }}</a-descriptions-item>
         <a-descriptions-item label="设备编码">{{ currentRow.device }}</a-descriptions-item>
-        <a-descriptions-item label="巡检人员">{{ currentRow.inspector }}</a-descriptions-item>
+        <a-descriptions-item label="巡检人">{{ currentRow.inspector }}</a-descriptions-item>
         <a-descriptions-item label="扫码时间">{{ currentRow.scanTime }}</a-descriptions-item>
         <a-descriptions-item label="提交时间">{{ currentRow.submitTime }}</a-descriptions-item>
         <a-descriptions-item label="巡检结果">{{ currentRow.result }}</a-descriptions-item>

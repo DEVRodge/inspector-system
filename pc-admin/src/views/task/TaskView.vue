@@ -117,7 +117,7 @@ function removeRow(record) {
         <a-table-column title="任务名称" data-index="plan" key="plan" />
         <a-table-column title="执行周期" data-index="cycleLabel" key="cycleLabel" width="100" />
         <a-table-column title="责任部门" data-index="team" key="team" width="110" />
-        <a-table-column title="责任人" data-index="owner" key="owner" width="100" />
+        <a-table-column title="巡检人" data-index="inspector" key="inspector" width="100" />
         <a-table-column title="执行时间" data-index="timeDisplay" key="timeDisplay" width="180" />
         <a-table-column title="设备数" data-index="devices" key="devices" width="90" />
         <a-table-column title="状态" data-index="status" key="status" width="100" />
@@ -141,7 +141,7 @@ function removeRow(record) {
           <a-descriptions-item label="执行时间">{{ currentRow.timeDisplay }}</a-descriptions-item>
           <a-descriptions-item v-if="currentRow.cron" label="Cron">{{ currentRow.cron }}</a-descriptions-item>
           <a-descriptions-item label="责任部门">{{ currentRow.team }}</a-descriptions-item>
-          <a-descriptions-item label="责任人">{{ currentRow.owner }}</a-descriptions-item>
+          <a-descriptions-item label="巡检人">{{ currentRow.inspector }}</a-descriptions-item>
           <a-descriptions-item label="状态">{{ currentRow.status }}</a-descriptions-item>
         </a-descriptions>
         <div class="drawer-section">
