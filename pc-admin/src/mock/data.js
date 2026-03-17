@@ -29,15 +29,174 @@ export const qrcodeRows = [
 export { taskRows } from './modules/task'
 
 export const recordRows = [
-  { key: '1', device: 'INV-A-001', plan: 'A 区逆变器日检', inspector: '张三', scanTime: '2025-09-12 08:11', submitTime: '2025-09-12 08:15', result: '正常', photos: 2 },
-  { key: '2', device: 'INV-A-002', plan: 'A 区逆变器日检', inspector: '张三', scanTime: '2025-09-12 08:23', submitTime: '2025-09-12 08:31', result: '异常', photos: 3 },
-  { key: '3', device: 'INV-B-001', plan: 'B 区逆变器日检', inspector: '李四', scanTime: '2025-09-12 09:02', submitTime: '2025-09-12 09:08', result: '正常', photos: 1 },
+  {
+    key: '1',
+    device: 'INV-A-001',
+    plan: 'A 区逆变器日检',
+    inspector: '张三',
+    scanTime: '2025-09-12 08:11',
+    submitTime: '2025-09-12 08:15',
+    result: '正常',
+    photos: 2,
+    items: [
+      { name: '设备外观', value: '正常' },
+      { name: '油位状态', value: '正常' },
+      { name: '渗漏油情况', value: '正常' },
+    ],
+    photoUrls: [
+      'https://picsum.photos/400/300?random=1',
+      'https://picsum.photos/400/300?random=2',
+    ],
+  },
+  {
+    key: '2',
+    device: 'INV-A-002',
+    plan: 'A 区逆变器日检',
+    inspector: '张三',
+    scanTime: '2025-09-12 08:23',
+    submitTime: '2025-09-12 08:31',
+    result: '异常',
+    photos: 3,
+    items: [
+      { name: '设备外观', value: '正常' },
+      { name: '油位状态', value: '异常' },
+      { name: '渗漏油情况', value: '正常' },
+    ],
+    photoUrls: [
+      'https://picsum.photos/400/300?random=3',
+      'https://picsum.photos/400/300?random=4',
+      'https://picsum.photos/400/300?random=5',
+    ],
+  },
+  {
+    key: '3',
+    device: 'INV-B-001',
+    plan: 'B 区逆变器日检',
+    inspector: '李四',
+    scanTime: '2025-09-12 09:02',
+    submitTime: '2025-09-12 09:08',
+    result: '正常',
+    photos: 1,
+    items: [
+      { name: '设备外观', value: '正常' },
+      { name: '油位状态', value: '正常' },
+      { name: '渗漏油情况', value: '正常' },
+    ],
+    photoUrls: ['https://picsum.photos/400/300?random=6'],
+  },
+  {
+    key: '4',
+    device: 'INV-B-001',
+    plan: 'B 区逆变器日检',
+    inspector: '李四',
+    scanTime: '2025-09-12 10:15',
+    submitTime: '2025-09-12 10:22',
+    result: '异常',
+    photos: 2,
+    items: [
+      { name: '设备外观', value: '正常' },
+      { name: '油位状态', value: '异常' },
+      { name: '渗漏油情况', value: '正常' },
+    ],
+    photoUrls: [
+      'https://picsum.photos/400/300?random=7',
+      'https://picsum.photos/400/300?random=8',
+    ],
+  },
+  {
+    key: '5',
+    device: 'INV-C-005',
+    plan: '全厂周检',
+    inspector: '赵班长',
+    scanTime: '2025-09-11 14:30',
+    submitTime: '2025-09-11 14:38',
+    result: '异常',
+    photos: 1,
+    items: [
+      { name: '设备外观', value: '异常' },
+      { name: '油位状态', value: '正常' },
+      { name: '渗漏油情况', value: '正常' },
+    ],
+    photoUrls: ['https://picsum.photos/400/300?random=9'],
+  },
+  {
+    key: '10',
+    plan: '全厂周检',
+    inspector: '张三',
+    scanTime: '2025-09-12 09:15',
+    submitTime: '2025-09-12 09:45',
+    result: '异常',
+    photos: 8,
+    deviceResults: [
+      {
+        device: 'DEV-A-001',
+        deviceType: '逆变器',
+        result: '正常',
+        items: [
+          { name: '设备外观', value: '正常' },
+          { name: '油位状态', value: '正常' },
+          { name: '渗漏油情况', value: '正常' },
+        ],
+        photoUrls: [
+          'https://picsum.photos/400/300?random=10',
+          'https://picsum.photos/400/300?random=11',
+        ],
+      },
+      {
+        device: 'DEV-A-018',
+        deviceType: '汇流箱',
+        result: '异常',
+        items: [
+          { name: '接线端子', value: '正常' },
+          { name: '保险状态', value: '异常' },
+          { name: '箱体密封', value: '正常' },
+        ],
+        photoUrls: [
+          'https://picsum.photos/400/300?random=12',
+          'https://picsum.photos/400/300?random=13',
+          'https://picsum.photos/400/300?random=14',
+        ],
+      },
+      {
+        device: 'DEV-B-003',
+        deviceType: '箱变',
+        result: '正常',
+        items: [
+          { name: '油位状态', value: '正常' },
+          { name: '异响异味', value: '正常' },
+          { name: '接地情况', value: '正常' },
+        ],
+        photoUrls: ['https://picsum.photos/400/300?random=15'],
+      },
+      {
+        device: 'DEV-C-011',
+        deviceType: '配电柜',
+        result: '正常',
+        items: [
+          { name: '柜门密封', value: '正常' },
+          { name: '指示灯', value: '正常' },
+        ],
+        photoUrls: ['https://picsum.photos/400/300?random=16'],
+      },
+      {
+        device: 'DEV-A-002',
+        deviceType: '逆变器',
+        result: '正常',
+        items: [
+          { name: '设备外观', value: '正常' },
+          { name: '油位状态', value: '正常' },
+          { name: '渗漏油情况', value: '正常' },
+        ],
+        photoUrls: ['https://picsum.photos/400/300?random=17'],
+      },
+    ],
+  },
 ]
 
 export const exceptionRows = [
-  { key: '1', code: 'E20250912001', device: 'INV-A-002', desc: '运行指示异常闪烁', handler: '王工', deadline: '2025-09-12 18:00', status: '处理中' },
-  { key: '2', code: 'E20250912002', device: 'INV-B-001', desc: '油位偏低', handler: '李四', deadline: '2025-09-13 12:00', status: '待处理' },
-  { key: '3', code: 'E20250911008', device: 'INV-C-005', desc: '环境卫生不达标', handler: '赵班长', deadline: '2025-09-12 17:00', status: '已处理' },
+  { key: '1', code: 'E20250912001', device: 'INV-A-002', desc: '运行指示异常闪烁', handler: '王工', deadline: '2025-09-12 18:00', status: '处理中', recordId: '2' },
+  { key: '2', code: 'E20250912002', device: 'INV-B-001', desc: '油位偏低', handler: '李四', deadline: '2025-09-13 12:00', status: '待处理', recordId: '4' },
+  { key: '3', code: 'E20250911008', device: 'INV-C-005', desc: '环境卫生不达标', handler: '赵班长', deadline: '2025-09-12 17:00', status: '已处理', recordId: '5' },
 ]
 
 export const reportStats = [

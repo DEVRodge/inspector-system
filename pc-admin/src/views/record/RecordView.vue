@@ -1,14 +1,13 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { recordRows } from '../../mock/data'
 
+const router = useRouter()
 const rows = ref([...recordRows])
-const detailVisible = ref(false)
-const currentRow = ref(null)
 
 function openDetail(record) {
-  currentRow.value = record
-  detailVisible.value = true
+  router.push({ name: 'recordDetail', params: { id: record.key } })
 }
 </script>
 
@@ -37,9 +36,17 @@ function openDetail(record) {
 
       <a-table :data-source="rows" row-key="key">
         <a-table-column title="任务名称" data-index="plan" key="plan" width="140" />
-        <a-table-column title="设备编码" data-index="device" key="device" width="120" />
+        <a-table-column title="设备编码" key="device" width="160">
+          <template #default="{ record }">
+            <template v-if="record.deviceResults?.length">
+              {{ record.deviceResults[0].device }} 等 {{ record.deviceResults.length }} 台
+            </template>
+            <template v-else>
+              {{ record.device }}
+            </template>
+          </template>
+        </a-table-column>
         <a-table-column title="巡检人" data-index="inspector" key="inspector" width="100" />
-        <a-table-column title="扫码时间" data-index="scanTime" key="scanTime" width="170" />
         <a-table-column title="提交时间" data-index="submitTime" key="submitTime" width="170" />
         <a-table-column title="结果" data-index="result" key="result" width="100" />
         <a-table-column title="照片数" data-index="photos" key="photos" width="90" />
@@ -50,31 +57,5 @@ function openDetail(record) {
         </a-table-column>
       </a-table>
     </a-card>
-
-    <a-drawer v-model:open="detailVisible" title="巡检记录详情" width="520">
-      <a-descriptions v-if="currentRow" :column="1" bordered size="small" class="drawer-section">
-        <a-descriptions-item label="任务名称">{{ currentRow.plan }}</a-descriptions-item>
-        <a-descriptions-item label="设备编码">{{ currentRow.device }}</a-descriptions-item>
-        <a-descriptions-item label="巡检人">{{ currentRow.inspector }}</a-descriptions-item>
-        <a-descriptions-item label="扫码时间">{{ currentRow.scanTime }}</a-descriptions-item>
-        <a-descriptions-item label="提交时间">{{ currentRow.submitTime }}</a-descriptions-item>
-        <a-descriptions-item label="巡检结果">{{ currentRow.result }}</a-descriptions-item>
-        <a-descriptions-item label="照片数量">{{ currentRow.photos }}</a-descriptions-item>
-      </a-descriptions>
-
-      <div class="drawer-section">
-        <div class="drawer-section__title">结果明细</div>
-        <div class="detail-list">
-          <div class="detail-list__item">
-            <strong>巡检结论</strong>
-            设备外观正常，油位状态正常，温度采集正常；若结果为异常，则关联异常单自动生成。
-          </div>
-          <div class="detail-list__item">
-            <strong>现场照片</strong>
-            已上传 {{ currentRow?.photos || 0 }} 张照片，正式接接口后可在此处切换图片预览组件。
-          </div>
-        </div>
-      </div>
-    </a-drawer>
   </div>
 </template>

@@ -114,14 +114,17 @@ a {
 
 .dashboard-hero__meta h2 {
   margin: 0;
-  font-size: 30px;
-  line-height: 1.2;
+  padding: 2px 0;
+  font-size: 28px;
+  line-height: 1.5;
   color: #ffffff;
 }
 
 .dashboard-hero__meta p {
   margin: 10px 0 0;
-  max-width: 680px;
+  padding: 2px 0;
+  max-width: 420px;
+  line-height: 1.6;
   color: rgba(255, 255, 255, 0.82);
   font-size: 14px;
 }

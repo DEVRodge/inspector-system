@@ -1,10 +1,9 @@
 <script setup>
 import { message } from 'ant-design-vue'
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { getDashboardData } from '../../api/modules/dashboard'
 import brandLogo from '../../assets/logo.png'
-
-const BaseChart = defineAsyncComponent(() => import('../../components/charts/BaseChart.vue'))
 
 const loading = ref(false)
 const dashboard = ref({
@@ -39,29 +38,6 @@ const completionPercent = computed(() => {
   return Number(((completedTasks / plannedTasks) * 100).toFixed(1))
 })
 
-const taskStatusChartOption = computed(() => ({
-  tooltip: { trigger: 'item' },
-  legend: {
-    bottom: 0,
-    icon: 'circle',
-  },
-  series: [
-    {
-      type: 'pie',
-      radius: ['58%', '76%'],
-      avoidLabelOverlap: false,
-      label: {
-        formatter: '{b}\n{c}项',
-      },
-      data: dashboard.value.taskDistribution.map((item) => ({
-        value: item.value,
-        name: item.name,
-        itemStyle: { color: item.color },
-      })),
-    },
-  ],
-}))
-
 function getTagColor(status) {
   const statusColorMap = {
     已完成: 'success',
@@ -76,8 +52,10 @@ function getTagColor(status) {
   return statusColorMap[status] || 'default'
 }
 
+const router = useRouter()
+
 function handleCreateTask() {
-  message.success('临时任务创建流程已预留，可在计划任务模块继续扩展。')
+  router.push({ name: 'taskNew' })
 }
 
 async function loadDashboard() {
@@ -107,7 +85,7 @@ onMounted(() => {
           </div>
           <div class="dashboard-hero__meta">
             <div class="dashboard-hero__eyebrow">GOKIN SOLAR · PC 管理端</div>
-            <h2>光伏厂区设备巡检数字化系统工作台</h2>
+            <h2>设备巡检数字化工作台</h2>
             <p>聚焦设备资产、任务执行、异常闭环和待办协同，为企业运维管理提供统一入口。</p>
           </div>
         </div>
@@ -128,39 +106,34 @@ onMounted(() => {
 
       <div class="panel-grid page-section">
         <a-card title="今日任务执行" :bordered="false">
-          <div class="dashboard-split">
-            <div>
-              <div class="summary-grid">
-                <div class="summary-grid__item">
-                  <span>已完成任务</span>
-                  <strong>{{ dashboard.completionSummary.completedTasks || 0 }}</strong>
-                </div>
-                <div class="summary-grid__item">
-                  <span>应执行任务</span>
-                  <strong>{{ dashboard.completionSummary.plannedTasks || 0 }}</strong>
-                </div>
-                <div class="summary-grid__item">
-                  <span>待处理异常</span>
-                  <strong>{{ dashboard.completionSummary.pendingExceptions || 0 }}</strong>
-                </div>
-                <div class="summary-grid__item">
-                  <span>整改及时率</span>
-                  <strong>{{ dashboard.completionSummary.closedLoopRate || 0 }}%</strong>
-                </div>
-              </div>
-              <div style="margin-top: 16px">
-                <div class="subtle-label">总体完成进度</div>
-                <a-progress :percent="completionPercent" status="active" />
-                <div class="subtle-text">
-                  逾期任务 {{ dashboard.completionSummary.overdueTasks || 0 }} 项，建议优先调度部门复核。
-                </div>
-              </div>
+          <div class="summary-grid">
+            <div class="summary-grid__item">
+              <span>已完成任务</span>
+              <strong>{{ dashboard.completionSummary.completedTasks || 0 }}</strong>
             </div>
-            <BaseChart :option="taskStatusChartOption" height="260px" />
+            <div class="summary-grid__item">
+              <span>应执行任务</span>
+              <strong>{{ dashboard.completionSummary.plannedTasks || 0 }}</strong>
+            </div>
+            <div class="summary-grid__item">
+              <span>待处理异常</span>
+              <strong>{{ dashboard.completionSummary.pendingExceptions || 0 }}</strong>
+            </div>
+            <div class="summary-grid__item">
+              <span>整改及时率</span>
+              <strong>{{ dashboard.completionSummary.closedLoopRate || 0 }}%</strong>
+            </div>
+          </div>
+          <div style="margin-top: 16px">
+            <div class="subtle-label">总体完成进度</div>
+            <a-progress :percent="completionPercent" status="active" />
+            <div class="subtle-text">
+              逾期任务 {{ dashboard.completionSummary.overdueTasks || 0 }} 项，建议优先调度部门复核。
+            </div>
           </div>
         </a-card>
 
-        <a-card title="高风险异常" :bordered="false">
+        <a-card title="异常设备" :bordered="false">
           <div class="detail-list">
             <div v-for="item in dashboard.exceptionList.slice(0, 3)" :key="item.code" class="detail-list__item">
               <strong>#{{ item.code }} · {{ item.device }}</strong>
