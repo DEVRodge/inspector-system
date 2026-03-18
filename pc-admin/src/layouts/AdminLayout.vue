@@ -20,6 +20,7 @@ import { useAuthStore } from '../stores/auth'
 import { getMenusCurrentTree } from '../api/modules/menu'
 import { isMockEnabled } from '../api/http'
 import { getMessageList, getUnreadTotal, readAll, readBatch } from '../api/modules/message'
+import { useWebSocket } from '../composables/useWebSocket'
 
 import brandLogo from '../assets/logo.png'
 
@@ -85,6 +86,10 @@ const menuNodes = computed(() => {
     icon: () => h(iconMap[item.icon]),
     label: item.title,
   }))
+})
+
+useWebSocket(() => {
+  refreshUnreadTotal()
 })
 
 onMounted(async () => {

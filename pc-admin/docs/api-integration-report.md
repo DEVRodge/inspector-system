@@ -198,9 +198,10 @@
 ## 五、联调建议
 
 1. **Base URL**：确保 `VITE_API_BASE_URL` 指向后端服务（如 `http://localhost:8080/api`）
-2. **登录态**：需先登录获取 token，设备/模板/任务/记录接口均需 Bearer token
-3. **分页参数**：若后端使用 `page`/`size` 等不同命名，需在 API 层做参数映射
-4. **响应格式**：当前适配 `{ records, total }` 或 `{ list, total }`，若后端格式不同需调整 `inspection.js`、`equipment.js` 中的解析逻辑
+2. **WebSocket 消息推送**：`VITE_WS_URL` 配置 WebSocket 地址（如 `ws://127.0.0.1:4009/websocket/msg`），部署到云服务器时改为 `wss://域名/websocket/msg`
+3. **登录态**：需先登录获取 token，设备/模板/任务/记录接口均需 Bearer token
+4. **分页参数**：若后端使用 `page`/`size` 等不同命名，需在 API 层做参数映射
+5. **响应格式**：当前适配 `{ records, total }` 或 `{ list, total }`，若后端格式不同需调整 `inspection.js`、`equipment.js` 中的解析逻辑
 
 ---
 
