@@ -93,6 +93,10 @@
 - `PUT /inspection/task/{id}` - 修改
 - `DELETE /inspection/task/{id}` - 删除
 
+**响应归一化**：`normalizeTaskRecord` 将后端可能返回的字段统一为前端格式：`taskName`→`plan`、`deviceIdList`/`deviceList`→`deviceIds`、`organizationId`→`team`、`userId`→`owner`。响应在 `data` 内时自动解包。
+
+**编辑与详情**：编辑页使用 `getById(id, { forceFetch: true })` 强制拉取详情，确保表单完整回填。详情抽屉在列表行无 `deviceIds` 时自动拉取详情以展示设备列表。`fillForm` 兼容 `deviceIdList`、`deviceList`、`organizationId`、`userId` 等后端字段名。列表页加载组织/用户列表，将 `team`/`owner` ID 映射为名称展示。
+
 ### 2.4 巡检记录 (Record)
 
 | 前端字段 | 后端字段 | 说明 |
@@ -212,14 +216,14 @@
 | 文件 | 变更 |
 |------|------|
 | pc-admin/src/api/modules/equipment.js | 新增 getDevicePage、getDeviceById、createDevice、updateDevice、deleteDevice；路径改为 /device/* |
-| pc-admin/src/api/modules/inspection.js | 新建，模板/任务/记录接口 |
+| pc-admin/src/api/modules/inspection.js | 新建，模板/任务/记录接口；计划任务 normalizeTaskRecord 响应归一化 |
 | pc-admin/src/stores/template.js | 支持 API 模式，loadList、getById、create、update、remove |
-| pc-admin/src/stores/task.js | 支持 API 模式，loadList、getById、create、update、remove |
+| pc-admin/src/stores/task.js | 支持 API 模式，loadList、getById(id, { forceFetch })、create、update、remove |
 | pc-admin/src/views/equipment/EquipmentView.vue | 对接 getDevicePage、CRUD、分页、筛选 |
 | pc-admin/src/views/template/TemplateView.vue | 对接 loadList、remove |
 | pc-admin/src/views/template/TemplateFormPage.vue | 对接 getById、create、update |
-| pc-admin/src/views/task/TaskView.vue | 对接 loadList、remove、设备列表 |
-| pc-admin/src/views/task/TaskFormPage.vue | 对接 getById、create、update、设备选择 |
+| pc-admin/src/views/task/TaskView.vue | 对接 loadList、remove、设备列表；详情无 deviceIds 时拉取详情；team/owner ID 转名称 |
+| pc-admin/src/views/task/TaskFormPage.vue | 对接 getById(forceFetch)、create、update、设备选择；fillForm 兼容多种后端字段 |
 | pc-admin/src/views/record/RecordView.vue | 对接 getRecordPage、分页、筛选 |
 | pc-admin/src/views/record/RecordDetailPage.vue | 对接 getRecordById |
 | pc-admin/src/api/modules/message.js | 消息接口：getUnreadTotal、getMessageList、readAll、readBatch |

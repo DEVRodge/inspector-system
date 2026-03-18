@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import dayjs from 'dayjs'
 import { message, Modal } from 'ant-design-vue'
-import { DEVICE_TYPE_DICT_CODE } from '../../mock/modules/settings'
 import {
   getDictionaryPage,
   createDictionary,
@@ -9,13 +9,16 @@ import {
   deleteDictionary,
 } from '../../api/modules/dictionary'
 import {
-  getOrganizationsList,
+  getOrganizations,
+  getOrganizationById,
   createOrganization,
   updateOrganization,
   deleteOrganization,
 } from '../../api/modules/organization'
 import {
   getPositions,
+  getPositionsByIds,
+  getPositionById,
   createPosition,
   updatePosition,
   deletePosition,
@@ -39,6 +42,9 @@ import {
   deleteRoleMenuMapping,
 } from '../../api/modules/role'
 import { getMenusTree } from '../../api/modules/menu'
+import { getBizLogPage } from '../../api/modules/biz-log'
+
+const DEVICE_TYPE_DICT_CODE = 'device_type'
 
 const orgData = ref([])
 const roleData = ref([])
@@ -46,6 +52,7 @@ const dictionaryRows = ref([])
 const permissionRows = ref([])
 const deptData = ref([])
 const postData = ref([])
+const postOptions = ref([])
 const logData = ref([])
 
 const dictKeyword = ref('')
@@ -53,8 +60,11 @@ const permKeyword = ref('')
 const personKeyword = ref('')
 const deptKeyword = ref('')
 const postKeyword = ref('')
-const logOperator = ref('')
-const logModule = ref('')
+const logKeyword = ref('')
+const logBizType = ref(undefined)
+const logBizId = ref('')
+const logOperation = ref(undefined)
+const logSuccess = ref(undefined)
 const logTimeRange = ref(null)
 
 const dictFiltered = computed(() => dictionaryRows.value)
@@ -66,24 +76,162 @@ const postFiltered = computed(() => {
   if (!k) return postData.value
   return postData.value.filter((r) => (r.name || '').toLowerCase().includes(k))
 })
-const logFiltered = computed(() => {
-  let list = logData.value
-  const op = (logOperator.value || '').trim().toLowerCase()
-  const mod = (logModule.value || '').trim().toLowerCase()
-  if (op) list = list.filter((r) => (r.operator || '').toLowerCase().includes(op))
-  if (mod) list = list.filter((r) => (r.module || '').toLowerCase().includes(mod))
-  if (logTimeRange.value && logTimeRange.value[0] && logTimeRange.value[1]) {
-    const [s, e] = logTimeRange.value
-    list = list.filter((r) => {
-      const t = new Date(r.time).getTime()
-      return t >= s.valueOf() && t <= e.valueOf()
-    })
-  }
-  return list
-})
 
 const menuTree = ref([])
 const permPagination = reactive({ current: 1, pageSize: 10, total: 0 })
+
+const selectedRoleIdForMenu = ref(undefined)
+const roleMenuCheckedKeys = ref([])
+const roleMenusLoading = ref(false)
+const menuSaveLoading = ref(false)
+const roleOptionsForMenu = ref([])
+const logLoading = ref(false)
+const logPagination = reactive({ current: 1, pageSize: 10, total: 0 })
+
+const LOG_BIZ_TYPE_OPTIONS = [
+  { value: 'INSPECTION_RECORD', label: '巡检记录' },
+  { value: 'INSPECTION_EXCEPTION', label: '异常任务' },
+]
+
+const LOG_OPERATION_OPTIONS = [
+  { value: 'SUBMIT', label: '提交' },
+  { value: 'ASSIGN', label: '指派' },
+  { value: 'PROCESS', label: '处理' },
+]
+
+const LOG_SUCCESS_OPTIONS = [
+  { value: true, label: '成功' },
+  { value: false, label: '失败' },
+]
+
+function toStatusLabel(enabled) {
+  return enabled ? '启用' : '停用'
+}
+
+function toEnabled(status) {
+  return status === '启用'
+}
+
+function getBizTypeLabel(value) {
+  return LOG_BIZ_TYPE_OPTIONS.find((it) => it.value === value)?.label ?? value ?? '-'
+}
+
+function getOperationLabel(value) {
+  return LOG_OPERATION_OPTIONS.find((it) => it.value === value)?.label ?? value ?? '-'
+}
+
+function formatDateTime(value) {
+  if (value == null || value === '') return '-'
+  const n = Number(value)
+  if (Number.isFinite(n) && n > 0) return dayjs(n).format('YYYY-MM-DD HH:mm:ss')
+  const d = dayjs(value)
+  return d.isValid() ? d.format('YYYY-MM-DD HH:mm:ss') : String(value)
+}
+
+function normalizeIdList(value) {
+  const list = Array.isArray(value) ? value : [value]
+  return list
+    .filter((item) => item !== undefined && item !== null && item !== '')
+    .map((item) => String(item))
+}
+
+function dedupeById(list = []) {
+  const map = new Map()
+  for (const item of list) {
+    if (item?.id == null) continue
+    map.set(String(item.id), item)
+  }
+  return [...map.values()]
+}
+
+function mapDeptNode(row, parent = null) {
+  const rawSort = row.sort ?? row.sequence ?? 0
+  const sort = Number.isFinite(Number(rawSort)) ? Number(rawSort) : 0
+  return {
+    key: String(row.id),
+    id: row.id,
+    parentId: row.parentId ?? parent?.id ?? null,
+    parentName: parent?.name ?? '-',
+    name: row.name ?? '',
+    remark: row.remark ?? '',
+    members: row.members ?? 0,
+    level: row.level ?? 0,
+    sort,
+    status: toStatusLabel(row.enabled),
+    enabled: !!row.enabled,
+  }
+}
+
+function mapPostFromApi(row) {
+  return {
+    key: String(row.id),
+    id: row.id,
+    name: row.name ?? '',
+    remark: row.remark ?? '',
+    sort: row.sort ?? 0,
+    status: toStatusLabel(row.enabled),
+    enabled: !!row.enabled,
+  }
+}
+
+function mapRoleFromApi(row) {
+  const name = row.name ?? row.role ?? row.roleName ?? ''
+  return {
+    key: String(row.id),
+    id: row.id,
+    role: name,
+    name,
+    remark: row.remark ?? '',
+    status: toStatusLabel(row.enabled),
+    enabled: !!row.enabled,
+    users: 0,
+    checkedKeys: [],
+    scope: '无',
+  }
+}
+
+function mapUserFromApi(row) {
+  const organizations = row.organizations ?? (row.organization ? [row.organization] : [])
+  const positions = row.positions ?? []
+  const roles = row.roles ?? []
+  const photographIdList = row.photographIdList ?? (row.photographList ?? []).map((item) => item.id)
+  return {
+    key: String(row.id),
+    id: row.id,
+    username: row.username ?? '',
+    name: row.name ?? '',
+    phone: row.mobile ?? row.username ?? '',
+    mobile: row.mobile ?? '',
+    email: row.email ?? '',
+    gender: row.gender ?? 'NONE',
+    remark: row.remark ?? '',
+    dept: organizations.map((item) => item.name).join('、') || '-',
+    post: positions.map((item) => item.name).join('、') || '-',
+    roles: roles.map((item) => item.name).join('、') || '-',
+    status: toStatusLabel(row.enabled),
+    enabled: !!row.enabled,
+    organizationIds: organizations.map((item) => String(item.id)),
+    positionIds: positions.map((item) => String(item.id)),
+    roleIds: roles.map((item) => String(item.id)),
+    photographIdList: normalizeIdList(photographIdList),
+    createTime: row.createTime ?? '',
+    lastLoginTime: row.lastLoginTime ?? '',
+  }
+}
+
+function mapBizLogFromApi(row) {
+  return {
+    ...row,
+    key: String(row.id ?? ''),
+    time: formatDateTime(row.createTime),
+    operator: row.operatorName || row.operatorAccount || (row.operatorId != null ? `用户${row.operatorId}` : '-'),
+    module: getBizTypeLabel(row.bizType),
+    operationLabel: getOperationLabel(row.operation),
+    result: row.success ? '成功' : '失败',
+    action: row.action || '-',
+    ip: row.clientIp || '-',
+  }
+}
 
 /** 字典：后端 code=分类, name=标签, value=编码 */
 function mapDictFromApi(row) {
@@ -120,19 +268,12 @@ async function loadDictFromApi() {
 }
 
 /** 递归扁平化树形部门 */
-function flattenOrgs(tree, parentId = null) {
+function flattenOrgs(tree, parent = null) {
   const result = []
   for (const o of tree || []) {
-    result.push({
-      key: String(o.id),
-      id: o.id,
-      parentId: o.parentId ?? parentId,
-      name: o.name ?? '',
-      sort: o.sort ?? o.sequence ?? 0,
-      status: o.enabled ? '启用' : '停用',
-    })
+    result.push(mapDeptNode(o, parent))
     if (o.children?.length) {
-      result.push(...flattenOrgs(o.children, o.id))
+      result.push(...flattenOrgs(o.children, { id: o.id, name: o.name ?? '' }))
     }
   }
   return result
@@ -142,8 +283,8 @@ async function loadDeptFromApi() {
   try {
     const params = {}
     if (deptKeyword.value?.trim()) params.name = deptKeyword.value.trim()
-    const data = await getOrganizationsList(params)
-    const arr = Array.isArray(data) ? data : data?.list ?? []
+    const data = await getOrganizations(params)
+    const arr = Array.isArray(data) ? data : data?.data ?? []
     deptData.value = flattenOrgs(arr)
   } catch (e) {
     message.error('加载部门失败：' + (e?.message || '未知错误'))
@@ -157,16 +298,28 @@ async function loadPostFromApi() {
     const params = { pageNumber: postPagination.current, pageSize: postPagination.pageSize }
     if (postKeyword.value?.trim()) params.name = postKeyword.value.trim()
     const data = await getPositions(params)
-    const arr = data?.records ?? data?.list ?? (Array.isArray(data) ? data : [])
+    const arr = data?.records ?? (Array.isArray(data) ? data : [])
     postPagination.total = data?.total ?? arr.length
-    postData.value = arr.map((o) => ({
-      key: String(o.id),
-      name: o.name ?? '',
-      sort: o.sort ?? 0,
-      status: o.enabled ? '启用' : '停用',
-    }))
+    postData.value = arr.map(mapPostFromApi)
   } catch (e) {
     message.error('加载岗位失败：' + (e?.message || '未知错误'))
+  }
+}
+
+async function loadPostOptionsFromApi(selectedIds = []) {
+  try {
+    const data = await getPositions({ pageNumber: 1, pageSize: 1000 })
+    const baseRows = data?.records ?? (Array.isArray(data) ? data : [])
+    let rows = [...baseRows]
+    const normalizedSelectedIds = normalizeIdList(selectedIds).map(Number).filter(Boolean)
+    if (normalizedSelectedIds.length) {
+      const selectedRows = await getPositionsByIds(normalizedSelectedIds)
+      rows = dedupeById([...rows, ...(Array.isArray(selectedRows) ? selectedRows : [])])
+    }
+    postOptions.value = rows.map(mapPostFromApi)
+  } catch (e) {
+    postOptions.value = []
+    message.error('加载岗位选项失败：' + (e?.message || '未知错误'))
   }
 }
 
@@ -181,24 +334,9 @@ async function loadPersonFromApi() {
   if (personKeyword.value?.trim()) baseParams.keyword = personKeyword.value.trim()
   try {
     const data = await getUsers(baseParams)
-    const inner = data?.data ?? data
-    const arr = inner?.records ?? inner?.list ?? data?.records ?? data?.list ?? []
-    personPagination.total = inner?.total ?? data?.total ?? arr.length
-    orgData.value = arr.map((u) => {
-      const orgs = u.organizations ?? []
-      const positions = u.positions ?? []
-      const roles = u.roles ?? []
-      return {
-        key: String(u.id),
-        username: u.username ?? '',
-        name: u.name ?? '',
-        phone: u.mobile ?? u.username ?? '',
-        dept: orgs.map((o) => o.name).join('、') || '-',
-        post: positions.map((p) => p.name).join('、') || '-',
-        roles: roles.map((r) => r.name).join('、') || '-',
-        status: u.enabled ? '启用' : '停用',
-      }
-    })
+    const arr = data?.records ?? (Array.isArray(data) ? data : [])
+    personPagination.total = data?.total ?? arr.length
+    orgData.value = arr.map(mapUserFromApi)
   } catch (e) {
     orgData.value = []
     personPagination.total = 0
@@ -212,17 +350,52 @@ async function loadPersonFromApi() {
 
 async function loadRoleFromApi() {
   try {
-    const data = await getRoles({ pageNumber: 1, pageSize: 500 })
-    const inner = data?.data ?? data
-    const arr = Array.isArray(inner) ? inner : (inner?.records ?? inner?.list ?? data?.records ?? data?.list ?? [])
-    roleData.value = arr.map((r) => ({
-      key: String(r.id),
-      id: r.id,
-      name: r.name ?? r.role ?? r.roleName ?? '',
-    }))
+    const data = await getRoles({ pageNumber: 1, pageSize: 1000 })
+    const arr = data?.records ?? (Array.isArray(data) ? data : [])
+    roleData.value = arr.map((r) => {
+      const mapped = mapRoleFromApi(r)
+      return {
+        key: mapped.key,
+        id: mapped.id,
+        name: mapped.name,
+      }
+    })
   } catch (e) {
     roleData.value = []
     message.error('加载角色失败：' + (e?.message || '未知错误'))
+  }
+}
+
+async function loadBizLogs() {
+  logLoading.value = true
+  try {
+    const periodBegin = logTimeRange.value?.[0]
+      ? dayjs(logTimeRange.value[0]).format('YYYY-MM-DD HH:mm:ss')
+      : undefined
+    const periodEnd = logTimeRange.value?.[1]
+      ? dayjs(logTimeRange.value[1]).format('YYYY-MM-DD HH:mm:ss')
+      : undefined
+    const res = await getBizLogPage({
+      pageNumber: logPagination.current,
+      pageSize: logPagination.pageSize,
+      bizType: logBizType.value,
+      bizId: logBizId.value || undefined,
+      operation: logOperation.value,
+      success: logSuccess.value,
+      periodBegin,
+      periodEnd,
+      keyword: logKeyword.value || undefined,
+    })
+    logData.value = (res?.list ?? []).map(mapBizLogFromApi)
+    logPagination.total = res?.total ?? 0
+    logPagination.current = res?.current ?? logPagination.current
+    logPagination.pageSize = res?.size ?? logPagination.pageSize
+  } catch (e) {
+    logData.value = []
+    logPagination.total = 0
+    message.error('加载业务日志失败：' + (e?.message || '未知错误'))
+  } finally {
+    logLoading.value = false
   }
 }
 
@@ -232,14 +405,28 @@ function onPersonPageChange(page, pageSize) {
   loadPersonFromApi()
 }
 
+watch(selectedRoleIdForMenu, () => {
+  loadRoleMenusForSelectedRole()
+})
+
+function onTabChange(key) {
+  if (key === 'roleMenu') loadRolesForMenuSelect()
+  if (key === 'logs') {
+    logPagination.current = 1
+    loadBizLogs()
+  }
+}
+
 onMounted(async () => {
   await loadDictFromApi()
   await loadDeptFromApi()
   await loadPostFromApi()
+  await loadPostOptionsFromApi()
   await loadPersonFromApi()
   await loadRoleFromApi()
   await loadPermFromApi()
   await loadMenuTreeFromApi()
+  await loadRolesForMenuSelect()
 })
 
 const personPagination = reactive({ current: 1, pageSize: 10, total: 0 })
@@ -255,6 +442,10 @@ const memberForm = reactive({
   roleIds: [],
   name: '',
   mobile: '',
+  email: '',
+  gender: 'NONE',
+  remark: '',
+  photographIdList: [],
   status: '启用',
 })
 
@@ -266,7 +457,7 @@ const dictForm = reactive({ key: '', category: '', code: '', label: '', sort: 0,
 const permVisible = ref(false)
 const permDetailVisible = ref(false)
 const currentPerm = ref(null)
-const permForm = reactive({ key: '', role: '', scope: '', status: '启用', remark: '', checkedKeys: [] })
+const permForm = reactive({ key: '', role: '', status: '启用', remark: '' })
 
 const deptVisible = ref(false)
 const deptDetailVisible = ref(false)
@@ -289,11 +480,15 @@ function fillMember(record) {
       key: record.key,
       username: record.username ?? '',
       password: '',
-      organizationIds: Array.isArray(orgIds) ? orgIds : [orgIds].filter(Boolean),
-      positionIds: Array.isArray(posIds) ? posIds : [posIds].filter(Boolean),
-      roleIds: record.roleIds ?? [],
+      organizationIds: normalizeIdList(orgIds),
+      positionIds: normalizeIdList(posIds),
+      roleIds: normalizeIdList(record.roleIds ?? []),
       name: record.name ?? '',
       mobile: record.mobile ?? record.phone ?? '',
+      email: record.email ?? '',
+      gender: record.gender ?? 'NONE',
+      remark: record.remark ?? '',
+      photographIdList: normalizeIdList(record.photographIdList ?? []),
       status: record.status ?? '启用',
     })
   } else {
@@ -306,17 +501,30 @@ function fillMember(record) {
       roleIds: [],
       name: '',
       mobile: '',
+      email: '',
+      gender: 'NONE',
+      remark: '',
+      photographIdList: [],
       status: '启用',
     })
   }
 }
-function openMemberCreate() {
+async function openMemberCreate() {
   currentMember.value = null
   fillMember(null)
+  await loadPostOptionsFromApi()
   memberVisible.value = true
 }
-function openMemberDetail(record) {
+async function openMemberDetail(record) {
   currentMember.value = record
+  if (record?.key) {
+    try {
+      const detail = await getUserById(record.key)
+      currentMember.value = mapUserFromApi(detail)
+    } catch (e) {
+      message.error('获取用户详情失败：' + (e?.message || '未知错误'))
+    }
+  }
   memberDetailVisible.value = true
 }
 async function openMemberEdit(record) {
@@ -324,18 +532,11 @@ async function openMemberEdit(record) {
   if (record?.key) {
     try {
       const u = await getUserById(record.key)
-      fillMember({
-        key: String(u.id),
-        username: u.username,
-        organizationIds: (u.organizations ?? []).map((o) => o.id),
-        positionIds: (u.positions ?? []).map((p) => p.id),
-        roleIds: (u.roles ?? []).map((r) => r.id),
-        name: u.name,
-        mobile: u.mobile ?? u.username,
-        status: u.enabled ? '启用' : '停用',
-      })
+      const mapped = mapUserFromApi(u)
+      fillMember(mapped)
+      await loadPostOptionsFromApi(mapped.positionIds)
     } catch (e) {
-      message.error('获取用户详情失败')
+      message.error('获取用户详情失败：' + (e?.message || '未知错误'))
       return
     }
   } else {
@@ -362,10 +563,14 @@ async function saveMember() {
       name: memberForm.name,
       username,
       mobile: memberForm.mobile || username,
-      enabled: memberForm.status === '启用',
+      email: memberForm.email || '',
+      gender: memberForm.gender || 'NONE',
+      remark: memberForm.remark || '',
+      enabled: toEnabled(memberForm.status),
       organizationIds: (memberForm.organizationIds || []).map(Number).filter(Boolean),
       positionIds: (memberForm.positionIds || []).map(Number).filter(Boolean),
       roleIds: (memberForm.roleIds || []).map(Number).filter(Boolean),
+      photographIdList: (memberForm.photographIdList || []).map(Number).filter(Boolean),
     }
     if (memberForm.password) payload.password = memberForm.password
     if (currentMember.value) {
@@ -487,48 +692,37 @@ function menuVoToTree(nodes) {
   }))
 }
 
-function collectMenuIds(nodes) {
-  const ids = []
-  for (const n of nodes || []) {
-    ids.push(n.id)
-    if (n.children?.length) ids.push(...collectMenuIds(n.children))
-  }
-  return ids
+function normalizeMenuList(res) {
+  if (!res) return []
+  if (Array.isArray(res)) return res
+  const list = res?.data ?? res?.records ?? res?.list
+  return Array.isArray(list) ? list : []
 }
 
-function scopeFromCheckedKeys(keys) {
-  if (!keys || !keys.length) return '无'
-  const findTitles = (nodes, checked) => {
-    const titles = []
-    for (const n of nodes || []) {
-      if (checked.includes(String(n.key))) titles.push(n.title)
-      if (n.children?.length) titles.push(...findTitles(n.children, checked))
-    }
-    return titles
+function collectMenuIds(nodes) {
+  const ids = []
+  const arr = Array.isArray(nodes) ? nodes : []
+  for (const n of arr) {
+    if (n?.id != null) ids.push(n.id)
+    if (n?.children?.length) ids.push(...collectMenuIds(n.children))
   }
-  return findTitles(menuTree.value, keys).join('、') || '无'
+  return ids
 }
 
 async function loadPermFromApi() {
   try {
     const data = await getRoles({ pageNumber: permPagination.current, pageSize: permPagination.pageSize, keyword: permKeyword.value?.trim() })
-    const inner = data?.data ?? data
-    const arr = Array.isArray(inner) ? inner : (inner?.records ?? inner?.list ?? data?.records ?? data?.list ?? [])
-    permPagination.total = inner?.total ?? data?.total ?? arr.length
+    const arr = data?.records ?? (Array.isArray(data) ? data : [])
+    permPagination.total = data?.total ?? arr.length
     permissionRows.value = await Promise.all(
       arr.map(async (r) => {
+        const base = mapRoleFromApi(r)
         let users = 0
         try {
-          const ids = await getRoleUserIds(r.id)
+          const ids = await getRoleUserIds(r.id).catch(() => [])
           users = Array.isArray(ids) ? ids.length : 0
         } catch (_) {}
-        return {
-          key: String(r.id),
-          role: r.name ?? r.role ?? r.roleName ?? '',
-          scope: '-',
-          users,
-          checkedKeys: [],
-        }
+        return { ...base, users }
       })
     )
   } catch (e) {
@@ -539,7 +733,7 @@ async function loadPermFromApi() {
 async function loadMenuTreeFromApi() {
   try {
     const data = await getMenusTree({ endType: 'WEB', enabled: true })
-    const arr = Array.isArray(data) ? data : data?.list ?? []
+    const arr = Array.isArray(data) ? data : data?.data ?? []
     menuTree.value = menuVoToTree(arr).map((n) => ({ ...n, selectable: false }))
   } catch (e) {
     message.error('加载菜单树失败：' + (e?.message || '未知错误'))
@@ -549,23 +743,14 @@ function fillPerm(record) {
   if (record) {
     permForm.key = record.key
     permForm.role = record.role
-    permForm.scope = record.scope
     permForm.status = record.status ?? '启用'
     permForm.remark = record.remark ?? ''
-    permForm.checkedKeys = record.checkedKeys ? [...record.checkedKeys] : []
   } else {
     permForm.key = ''
     permForm.role = ''
-    permForm.scope = ''
     permForm.status = '启用'
     permForm.remark = ''
-    permForm.checkedKeys = []
   }
-}
-function onPermTreeCheck(keys, evt) {
-  const checked = Array.isArray(keys) ? keys : (keys?.checked ?? [])
-  permForm.checkedKeys = checked
-  permForm.scope = scopeFromCheckedKeys(checked)
 }
 function openPermCreate() {
   currentPerm.value = null
@@ -576,20 +761,9 @@ function openPermDetail(record) {
   currentPerm.value = record
   permDetailVisible.value = true
 }
-async function openPermEdit(record) {
+function openPermEdit(record) {
   currentPerm.value = record
-  if (record?.key) {
-    try {
-      const menus = await getRoleMenus(record.key, { endType: 'WEB' })
-      const ids = collectMenuIds(menus)
-      fillPerm({ ...record, checkedKeys: ids.map(String) })
-    } catch (e) {
-      message.error('获取角色菜单失败')
-      fillPerm(record)
-    }
-  } else {
-    fillPerm(record)
-  }
+  fillPerm(record)
   permVisible.value = true
 }
 
@@ -598,30 +772,17 @@ async function savePerm() {
     message.warning('请填写角色名称')
     return
   }
-  permForm.scope = scopeFromCheckedKeys(permForm.checkedKeys)
   try {
-    const payload = { name: permForm.role, enabled: (permForm.status || '启用') === '启用', remark: permForm.remark || '' }
-    let roleId
+    const payload = { name: permForm.role, enabled: toEnabled(permForm.status || '启用'), remark: permForm.remark || '' }
     if (currentPerm.value) {
       await updateRole(currentPerm.value.key, payload)
-      roleId = Number(currentPerm.value.key)
       message.success('角色已更新')
     } else {
-      const res = await createRole(payload)
-      roleId = res?.id ?? res?.data?.id ?? (typeof res === 'number' ? res : null)
+      await createRole(payload)
       message.success('角色已新增')
     }
-    if (roleId && permForm.checkedKeys?.length !== undefined) {
-      const currentMenus = await getRoleMenus(roleId, { endType: 'WEB' })
-      const currentIds = new Set(collectMenuIds(currentMenus).map(String))
-      const targetIds = new Set((permForm.checkedKeys || []).map(String))
-      const toAdd = [...targetIds].filter((id) => !currentIds.has(id))
-      const toRemove = [...currentIds].filter((id) => !targetIds.has(id))
-      for (const id of toRemove) await deleteRoleMenuMapping(roleId, Number(id))
-      for (const id of toAdd) await saveRoleMenuMapping(roleId, Number(id))
-    }
     permVisible.value = false
-    await loadPermFromApi()
+    await Promise.all([loadPermFromApi(), loadRoleFromApi(), loadPersonFromApi(), loadRolesForMenuSelect()])
   } catch (e) {
     message.error('保存失败：' + (e?.message || '未知错误'))
     throw e
@@ -636,7 +797,7 @@ function removePerm(record) {
       try {
         await deleteRole(record.key)
         message.success('已删除')
-        await loadPermFromApi()
+        await Promise.all([loadPermFromApi(), loadRoleFromApi(), loadPersonFromApi(), loadRolesForMenuSelect()])
       } catch (e) {
         message.error('删除失败：' + (e?.message || '未知错误'))
       }
@@ -644,22 +805,113 @@ function removePerm(record) {
   })
 }
 
+async function loadRolesForMenuSelect() {
+  try {
+    const data = await getRoles({ pageNumber: 1, pageSize: 500 })
+    const arr = data?.records ?? (Array.isArray(data) ? data : [])
+    roleOptionsForMenu.value = arr.map((r) => ({
+      value: String(r.id),
+      label: r.name ?? r.role ?? r.roleName ?? String(r.id),
+    }))
+  } catch {
+    roleOptionsForMenu.value = []
+  }
+}
+
+async function loadRoleMenusForSelectedRole() {
+  const roleId = selectedRoleIdForMenu.value
+  if (!roleId) {
+    roleMenuCheckedKeys.value = []
+    return
+  }
+  roleMenusLoading.value = true
+  try {
+    const res = await getRoleMenus(roleId, { endType: 'WEB' })
+    const list = normalizeMenuList(res)
+    const ids = collectMenuIds(list).map(String).filter((id) => id && id !== 'undefined')
+    roleMenuCheckedKeys.value = ids
+  } catch (e) {
+    roleMenuCheckedKeys.value = []
+    message.error('加载角色菜单失败：' + (e?.message || '未知错误'))
+  } finally {
+    roleMenusLoading.value = false
+  }
+}
+
+function onRoleMenuTreeCheck(keys, evt) {
+  const checked = Array.isArray(keys) ? keys : (keys?.checked ?? [])
+  roleMenuCheckedKeys.value = checked
+}
+
+async function saveRoleMenuPermission() {
+  const roleId = selectedRoleIdForMenu.value
+  if (!roleId) {
+    message.warning('请先选择角色')
+    return
+  }
+  menuSaveLoading.value = true
+  try {
+    const res = await getRoleMenus(roleId, { endType: 'WEB' })
+    const list = normalizeMenuList(res)
+    const currentIds = new Set(collectMenuIds(list).map(String).filter((id) => id && id !== 'undefined'))
+    const targetIds = new Set((roleMenuCheckedKeys.value || []).map(String).filter((id) => id && id !== 'undefined'))
+    const toAdd = [...targetIds].filter((id) => !currentIds.has(id))
+    const toRemove = [...currentIds].filter((id) => !targetIds.has(id))
+    for (const id of toRemove) await deleteRoleMenuMapping(roleId, String(id))
+    for (const id of toAdd) await saveRoleMenuMapping(roleId, String(id))
+    message.success('菜单权限已保存')
+    await loadRoleMenusForSelectedRole()
+  } catch (e) {
+    message.error('保存失败：' + (e?.message || '未知错误'))
+  } finally {
+    menuSaveLoading.value = false
+  }
+}
+
 function fillDept(record) {
-  if (record) Object.assign(deptForm, { key: record.key, name: record.name, parentId: record.parentId != null ? String(record.parentId) : undefined, remark: '', sort: record.sort ?? 0, status: record.status ?? '启用' })
-  else Object.assign(deptForm, { key: '', name: '', parentId: undefined, remark: '', sort: 0, status: '启用' })
+  if (record) {
+    Object.assign(deptForm, {
+      key: record.key,
+      name: record.name,
+      parentId: record.parentId != null && Number(record.parentId) !== 0 ? String(record.parentId) : undefined,
+      remark: record.remark ?? '',
+      sort: record.sort ?? 0,
+      status: record.status ?? '启用',
+    })
+  } else {
+    Object.assign(deptForm, { key: '', name: '', parentId: undefined, remark: '', sort: 0, status: '启用' })
+  }
 }
 function openDeptCreate() {
   currentDept.value = null
   fillDept(null)
   deptVisible.value = true
 }
-function openDeptDetail(record) {
+async function openDeptDetail(record) {
   currentDept.value = record
+  if (record?.key) {
+    try {
+      const detail = await getOrganizationById(record.key)
+      currentDept.value = mapDeptNode(detail, detail?.parentId ? { id: detail.parentId, name: deptData.value.find((item) => String(item.id) === String(detail.parentId))?.name ?? '' } : null)
+    } catch (e) {
+      message.error('获取部门详情失败：' + (e?.message || '未知错误'))
+    }
+  }
   deptDetailVisible.value = true
 }
-function openDeptEdit(record) {
+async function openDeptEdit(record) {
   currentDept.value = record
-  fillDept(record)
+  if (record?.key) {
+    try {
+      const detail = await getOrganizationById(record.key)
+      fillDept(mapDeptNode(detail, detail?.parentId ? { id: detail.parentId, name: deptData.value.find((item) => String(item.id) === String(detail.parentId))?.name ?? '' } : null))
+    } catch (e) {
+      message.error('获取部门详情失败：' + (e?.message || '未知错误'))
+      fillDept(record)
+    }
+  } else {
+    fillDept(record)
+  }
   deptVisible.value = true
 }
 async function saveDept() {
@@ -669,27 +921,20 @@ async function saveDept() {
   }
   try {
     const payload = {
+      parentId: deptForm.parentId ? Number(deptForm.parentId) : 0,
       name: deptForm.name,
       sort: deptForm.sort ?? 0,
-      enabled: deptForm.status === '启用',
+      enabled: toEnabled(deptForm.status),
       remark: deptForm.remark ?? '',
     }
     if (currentDept.value) {
       await updateOrganization(currentDept.value.key, payload)
-      const index = deptData.value.findIndex((item) => item.key === currentDept.value.key)
-      deptData.value[index] = { ...deptData.value[index], name: deptForm.name, sort: deptForm.sort ?? 0, status: deptForm.status }
       message.success('部门已更新')
     } else {
-      if (deptForm.parentId) payload.parentId = Number(deptForm.parentId)
-      const res = await createOrganization(payload)
-      deptData.value.unshift({
-        key: String(res?.id ?? Date.now()),
-        name: deptForm.name,
-        sort: deptForm.sort ?? 0,
-        status: deptForm.status,
-      })
+      await createOrganization(payload)
       message.success('部门已新增')
     }
+    await Promise.all([loadDeptFromApi(), loadPersonFromApi()])
     deptVisible.value = false
   } catch (e) {
     message.error('保存失败：' + (e?.message || '未知错误'))
@@ -702,8 +947,8 @@ function removeDept(record) {
     async onOk() {
       try {
         await deleteOrganization(record.key)
-        deptData.value = deptData.value.filter((item) => item.key !== record.key)
         message.success('已删除')
+        await Promise.all([loadDeptFromApi(), loadPersonFromApi()])
       } catch (e) {
         message.error('删除失败：' + (e?.message || '未知错误'))
       }
@@ -712,7 +957,7 @@ function removeDept(record) {
 }
 
 function fillPost(record) {
-  if (record) Object.assign(postForm, { key: record.key, name: record.name, sort: record.sort ?? 0, remark: '', status: record.status ?? '启用' })
+  if (record) Object.assign(postForm, { key: record.key, name: record.name, sort: record.sort ?? 0, remark: record.remark ?? '', status: record.status ?? '启用' })
   else Object.assign(postForm, { key: '', name: '', sort: 0, remark: '', status: '启用' })
 }
 function openPostCreate() {
@@ -720,13 +965,31 @@ function openPostCreate() {
   fillPost(null)
   postVisible.value = true
 }
-function openPostDetail(record) {
+async function openPostDetail(record) {
   currentPost.value = record
+  if (record?.key) {
+    try {
+      const detail = await getPositionById(record.key)
+      currentPost.value = mapPostFromApi(detail)
+    } catch (e) {
+      message.error('获取岗位详情失败：' + (e?.message || '未知错误'))
+    }
+  }
   postDetailVisible.value = true
 }
-function openPostEdit(record) {
+async function openPostEdit(record) {
   currentPost.value = record
-  fillPost(record)
+  if (record?.key) {
+    try {
+      const detail = await getPositionById(record.key)
+      fillPost(mapPostFromApi(detail))
+    } catch (e) {
+      message.error('获取岗位详情失败：' + (e?.message || '未知错误'))
+      fillPost(record)
+    }
+  } else {
+    fillPost(record)
+  }
   postVisible.value = true
 }
 async function savePost() {
@@ -738,24 +1001,17 @@ async function savePost() {
     const payload = {
       name: postForm.name,
       sort: postForm.sort ?? 0,
-      enabled: postForm.status === '启用',
+      enabled: toEnabled(postForm.status),
       remark: postForm.remark ?? '',
     }
     if (currentPost.value) {
       await updatePosition(currentPost.value.key, payload)
-      const index = postData.value.findIndex((item) => item.key === currentPost.value.key)
-      postData.value[index] = { ...postData.value[index], name: postForm.name, sort: postForm.sort ?? 0, status: postForm.status }
       message.success('岗位已更新')
     } else {
-      const res = await createPosition(payload)
-      postData.value.unshift({
-        key: String(res?.id ?? Date.now()),
-        name: postForm.name,
-        sort: postForm.sort ?? 0,
-        status: postForm.status,
-      })
+      await createPosition(payload)
       message.success('岗位已新增')
     }
+    await Promise.all([loadPostFromApi(), loadPostOptionsFromApi(memberForm.positionIds), loadPersonFromApi()])
     postVisible.value = false
   } catch (e) {
     message.error('保存失败：' + (e?.message || '未知错误'))
@@ -768,8 +1024,8 @@ function removePost(record) {
     async onOk() {
       try {
         await deletePosition(record.key)
-        postData.value = postData.value.filter((item) => item.key !== record.key)
         message.success('已删除')
+        await Promise.all([loadPostFromApi(), loadPostOptionsFromApi(memberForm.positionIds), loadPersonFromApi()])
       } catch (e) {
         message.error('删除失败：' + (e?.message || '未知错误'))
       }
@@ -781,8 +1037,28 @@ function openLogDetail(record) {
   currentLog.value = record
   logDetailVisible.value = true
 }
-function exportLogs() {
-  message.info('导出接口对接后生效，将导出当前筛选结果。')
+
+function onLogSearch() {
+  logPagination.current = 1
+  loadBizLogs()
+}
+
+function onLogReset() {
+  logKeyword.value = ''
+  logBizType.value = undefined
+  logBizId.value = ''
+  logOperation.value = undefined
+  logSuccess.value = undefined
+  logTimeRange.value = null
+  logPagination.current = 1
+  loadBizLogs()
+}
+
+function onLogTableChange(pag) {
+  if (!pag) return
+  logPagination.current = pag.current ?? logPagination.current
+  logPagination.pageSize = pag.pageSize ?? logPagination.pageSize
+  loadBizLogs()
 }
 </script>
 
@@ -796,7 +1072,7 @@ function exportLogs() {
     </div>
 
     <a-card :bordered="false">
-      <a-tabs>
+      <a-tabs @change="onTabChange">
         <a-tab-pane key="dictionary" tab="设备类型">
           <div class="table-toolbar">
             <div class="table-toolbar__left">
@@ -823,7 +1099,7 @@ function exportLogs() {
           </a-table>
         </a-tab-pane>
 
-        <a-tab-pane key="permission" tab="权限管理">
+        <a-tab-pane key="role" tab="角色管理">
           <div class="table-toolbar">
             <div class="table-toolbar__left">
               <a-input v-model:value="permKeyword" placeholder="搜索角色名称" allow-clear style="width: 280px" @press-enter="permPagination.current = 1; loadPermFromApi()" />
@@ -835,7 +1111,8 @@ function exportLogs() {
           </div>
           <a-table :data-source="permFiltered" :pagination="{ current: permPagination.current, pageSize: permPagination.pageSize, total: permPagination.total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }" row-key="key" @change="(pag) => pag && (permPagination.current = pag.current) && (permPagination.pageSize = pag.pageSize) && loadPermFromApi()">
             <a-table-column title="角色名称" data-index="role" key="role" width="180" />
-            <a-table-column title="权限范围" data-index="scope" key="scope" />
+            <a-table-column title="备注" data-index="remark" key="remark" ellipsis />
+            <a-table-column title="状态" data-index="status" key="status" width="100" />
             <a-table-column title="关联用户数" data-index="users" key="users" width="120" />
             <a-table-column title="操作" key="action" width="180">
               <template #default="{ record }">
@@ -847,6 +1124,39 @@ function exportLogs() {
               </template>
             </a-table-column>
           </a-table>
+        </a-tab-pane>
+
+        <a-tab-pane key="roleMenu" tab="菜单权限">
+          <div class="table-toolbar">
+            <div class="table-toolbar__left">
+              <a-select
+                v-model:value="selectedRoleIdForMenu"
+                placeholder="请选择角色"
+                allow-clear
+                style="width: 280px"
+                :options="roleOptionsForMenu"
+                :loading="roleMenusLoading"
+              />
+              <a-button type="primary" :loading="menuSaveLoading" :disabled="!selectedRoleIdForMenu" @click="saveRoleMenuPermission">
+                保存菜单权限
+              </a-button>
+            </div>
+          </div>
+          <a-alert v-if="!selectedRoleIdForMenu" message="请先选择角色，再配置该角色可访问的菜单（Web 端）。" type="info" show-icon style="margin-bottom: 16px" />
+          <div v-else class="role-menu-tree-wrap">
+            <a-spin :spinning="roleMenusLoading">
+              <a-tree
+                v-if="menuTree.length"
+                :tree-data="menuTree"
+                :checked-keys="roleMenuCheckedKeys"
+                checkable
+                :selectable="false"
+                block-node
+                @check="onRoleMenuTreeCheck"
+              />
+              <a-empty v-else description="暂无菜单数据，请检查菜单接口" />
+            </a-spin>
+          </div>
         </a-tab-pane>
 
         <a-tab-pane key="dept" tab="部门管理">
@@ -861,6 +1171,8 @@ function exportLogs() {
           </div>
           <a-table :data-source="deptFiltered" :pagination="false" row-key="key">
             <a-table-column title="部门名称" data-index="name" key="name" width="200" />
+            <a-table-column title="上级部门" data-index="parentName" key="parentName" width="160" />
+            <a-table-column title="成员数" data-index="members" key="members" width="90" />
             <a-table-column title="排序" data-index="sort" key="sort" width="80" />
             <a-table-column title="状态" data-index="status" key="status" width="100" />
             <a-table-column title="操作" key="action" width="180">
@@ -915,6 +1227,7 @@ function exportLogs() {
             <a-table-column title="账号" data-index="username" key="username" width="110" />
             <a-table-column title="部门" data-index="dept" key="dept" width="120" />
             <a-table-column title="岗位" data-index="post" key="post" width="120" />
+            <a-table-column title="角色" data-index="roles" key="roles" width="150" />
             <a-table-column title="姓名" data-index="name" key="name" width="100" />
             <a-table-column title="手机号" data-index="phone" key="phone" width="130" />
             <a-table-column title="状态" data-index="status" key="status" width="100" />
@@ -931,21 +1244,31 @@ function exportLogs() {
         </a-tab-pane>
 
         <a-tab-pane key="logs" tab="日志审计">
-          <a-alert message="暂无日志数据，接口暂未提供" type="info" show-icon style="margin-bottom: 16px" />
           <div class="table-toolbar">
             <div class="table-toolbar__left">
-              <a-input v-model:value="logOperator" placeholder="操作人" allow-clear style="width: 140px" />
-              <a-input v-model:value="logModule" placeholder="模块" allow-clear style="width: 140px" />
+              <a-input v-model:value="logKeyword" placeholder="关键字（操作描述/操作人）" allow-clear style="width: 220px" @press-enter="onLogSearch" />
+              <a-select v-model:value="logBizType" :options="LOG_BIZ_TYPE_OPTIONS" placeholder="业务类型" allow-clear style="width: 150px" />
+              <a-input v-model:value="logBizId" placeholder="业务主键 bizId" allow-clear style="width: 160px" @press-enter="onLogSearch" />
+              <a-select v-model:value="logOperation" :options="LOG_OPERATION_OPTIONS" placeholder="操作类型" allow-clear style="width: 130px" />
+              <a-select v-model:value="logSuccess" :options="LOG_SUCCESS_OPTIONS" placeholder="结果" allow-clear style="width: 100px" />
               <a-range-picker v-model:value="logTimeRange" show-time style="width: 320px" />
             </div>
             <div class="table-toolbar__right">
-              <a-button @click="exportLogs">导出日志</a-button>
+              <a-button type="primary" :loading="logLoading" @click="onLogSearch">查询</a-button>
+              <a-button @click="onLogReset">重置</a-button>
             </div>
           </div>
-          <a-table :data-source="logFiltered" :pagination="false" row-key="key">
+          <a-table
+            :data-source="logData"
+            :loading="logLoading"
+            :pagination="{ current: logPagination.current, pageSize: logPagination.pageSize, total: logPagination.total, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }"
+            row-key="key"
+            @change="onLogTableChange"
+          >
             <a-table-column title="时间" data-index="time" key="time" width="180" />
             <a-table-column title="操作人" data-index="operator" key="operator" width="100" />
             <a-table-column title="模块" data-index="module" key="module" width="120" />
+            <a-table-column title="操作类型" data-index="operationLabel" key="operationLabel" width="100" />
             <a-table-column title="操作内容" data-index="action" key="action" />
             <a-table-column title="结果" data-index="result" key="result" width="100" />
             <a-table-column title="操作" key="action" width="100">
@@ -961,11 +1284,16 @@ function exportLogs() {
     <a-drawer v-model:open="memberDetailVisible" title="账号详情" width="420">
       <a-descriptions v-if="currentMember" :column="1" bordered size="small">
         <a-descriptions-item label="账号">{{ currentMember.username }}</a-descriptions-item>
-        <a-descriptions-item label="部门">{{ currentMember.dept }}</a-descriptions-item>
-        <a-descriptions-item label="岗位">{{ currentMember.post }}</a-descriptions-item>
         <a-descriptions-item label="姓名">{{ currentMember.name }}</a-descriptions-item>
         <a-descriptions-item label="手机号">{{ currentMember.phone }}</a-descriptions-item>
+        <a-descriptions-item label="邮箱">{{ currentMember.email || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="部门">{{ currentMember.dept }}</a-descriptions-item>
+        <a-descriptions-item label="岗位">{{ currentMember.post }}</a-descriptions-item>
+        <a-descriptions-item label="角色">{{ currentMember.roles || '-' }}</a-descriptions-item>
         <a-descriptions-item label="状态">{{ currentMember.status }}</a-descriptions-item>
+        <a-descriptions-item label="备注">{{ currentMember.remark || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="创建时间">{{ currentMember.createTime || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="最近登录">{{ currentMember.lastLoginTime || '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-drawer>
 
@@ -983,6 +1311,7 @@ function exportLogs() {
         </a-form-item>
         <a-form-item label="姓名" required><a-input v-model:value="memberForm.name" placeholder="姓名" /></a-form-item>
         <a-form-item label="手机号"><a-input v-model:value="memberForm.mobile" placeholder="手机号" /></a-form-item>
+        <a-form-item label="邮箱"><a-input v-model:value="memberForm.email" placeholder="邮箱" /></a-form-item>
         <a-form-item label="部门">
           <a-select v-model:value="memberForm.organizationIds" placeholder="请选择部门" mode="multiple" allow-clear style="width: 100%">
             <a-select-option v-for="d in deptData" :key="d.key" :value="d.key">{{ d.name }}</a-select-option>
@@ -990,13 +1319,16 @@ function exportLogs() {
         </a-form-item>
         <a-form-item label="岗位">
           <a-select v-model:value="memberForm.positionIds" placeholder="请选择岗位" mode="multiple" allow-clear style="width: 100%">
-            <a-select-option v-for="p in postData" :key="p.key" :value="p.key">{{ p.name }}</a-select-option>
+            <a-select-option v-for="p in postOptions" :key="p.key" :value="p.key">{{ p.name }}</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="角色">
           <a-select v-model:value="memberForm.roleIds" placeholder="请选择角色" mode="multiple" allow-clear style="width: 100%">
             <a-select-option v-for="r in roleData" :key="r.key" :value="r.key">{{ r.name }}</a-select-option>
           </a-select>
+        </a-form-item>
+        <a-form-item label="备注">
+          <a-textarea v-model:value="memberForm.remark" :rows="3" placeholder="备注" />
         </a-form-item>
         <a-form-item label="状态">
           <a-select v-model:value="memberForm.status">
@@ -1032,12 +1364,13 @@ function exportLogs() {
     <a-drawer v-model:open="permDetailVisible" title="角色详情" width="420">
       <a-descriptions v-if="currentPerm" :column="1" bordered size="small">
         <a-descriptions-item label="角色名称">{{ currentPerm.role }}</a-descriptions-item>
-        <a-descriptions-item label="权限范围">{{ currentPerm.scope }}</a-descriptions-item>
+        <a-descriptions-item label="状态">{{ currentPerm.status }}</a-descriptions-item>
         <a-descriptions-item label="关联用户数">{{ currentPerm.users }}</a-descriptions-item>
+        <a-descriptions-item label="备注">{{ currentPerm.remark || '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-drawer>
 
-    <a-modal v-model:open="permVisible" :title="currentPerm ? '编辑角色' : '新增角色'" width="520" @ok="savePerm">
+    <a-modal v-model:open="permVisible" :title="currentPerm ? '编辑角色' : '新增角色'" width="440" @ok="savePerm">
       <a-form layout="vertical">
         <a-form-item label="角色名称" required>
           <a-input v-model:value="permForm.role" placeholder="角色名称" />
@@ -1048,14 +1381,8 @@ function exportLogs() {
             <a-select-option value="停用">停用</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="权限范围（勾选菜单）">
-          <a-tree
-            :tree-data="menuTree"
-            :checked-keys="permForm.checkedKeys"
-            checkable
-            :selectable="false"
-            @check="(keys, evt) => onPermTreeCheck(keys, evt)"
-          />
+        <a-form-item label="备注">
+          <a-textarea v-model:value="permForm.remark" :rows="3" placeholder="角色备注" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -1063,8 +1390,11 @@ function exportLogs() {
     <a-drawer v-model:open="deptDetailVisible" title="部门详情" width="400">
       <a-descriptions v-if="currentDept" :column="1" bordered size="small">
         <a-descriptions-item label="部门名称">{{ currentDept.name }}</a-descriptions-item>
+        <a-descriptions-item label="上级部门">{{ currentDept.parentName || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="成员数">{{ currentDept.members ?? 0 }}</a-descriptions-item>
         <a-descriptions-item label="排序">{{ currentDept.sort }}</a-descriptions-item>
         <a-descriptions-item label="状态">{{ currentDept.status }}</a-descriptions-item>
+        <a-descriptions-item label="备注">{{ currentDept.remark || '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-drawer>
 
@@ -1077,6 +1407,9 @@ function exportLogs() {
         </a-form-item>
         <a-form-item label="部门名称" required><a-input v-model:value="deptForm.name" /></a-form-item>
         <a-form-item label="排序"><a-input-number v-model:value="deptForm.sort" :min="0" style="width: 100%" /></a-form-item>
+        <a-form-item label="备注">
+          <a-textarea v-model:value="deptForm.remark" :rows="3" placeholder="部门备注" />
+        </a-form-item>
         <a-form-item label="状态">
           <a-select v-model:value="deptForm.status">
             <a-select-option value="启用">启用</a-select-option>
@@ -1091,6 +1424,7 @@ function exportLogs() {
         <a-descriptions-item label="岗位名称">{{ currentPost.name }}</a-descriptions-item>
         <a-descriptions-item label="排序">{{ currentPost.sort }}</a-descriptions-item>
         <a-descriptions-item label="状态">{{ currentPost.status }}</a-descriptions-item>
+        <a-descriptions-item label="备注">{{ currentPost.remark || '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-drawer>
 
@@ -1098,6 +1432,9 @@ function exportLogs() {
       <a-form layout="vertical">
         <a-form-item label="岗位名称" required><a-input v-model:value="postForm.name" /></a-form-item>
         <a-form-item label="排序" required><a-input-number v-model:value="postForm.sort" :min="0" style="width: 100%" /></a-form-item>
+        <a-form-item label="备注">
+          <a-textarea v-model:value="postForm.remark" :rows="3" placeholder="岗位备注" />
+        </a-form-item>
         <a-form-item label="状态">
           <a-select v-model:value="postForm.status">
             <a-select-option value="启用">启用</a-select-option>
@@ -1112,9 +1449,15 @@ function exportLogs() {
         <a-descriptions-item label="时间">{{ currentLog.time }}</a-descriptions-item>
         <a-descriptions-item label="操作人">{{ currentLog.operator }}</a-descriptions-item>
         <a-descriptions-item label="模块">{{ currentLog.module }}</a-descriptions-item>
+        <a-descriptions-item label="业务主键">{{ currentLog.bizId ?? '-' }}</a-descriptions-item>
+        <a-descriptions-item label="操作类型">{{ currentLog.operationLabel }}</a-descriptions-item>
         <a-descriptions-item label="操作内容">{{ currentLog.action }}</a-descriptions-item>
         <a-descriptions-item label="结果">{{ currentLog.result }}</a-descriptions-item>
-        <a-descriptions-item v-if="currentLog.ip" label="IP">{{ currentLog.ip }}</a-descriptions-item>
+        <a-descriptions-item label="请求方法">{{ currentLog.httpMethod || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="请求地址">{{ currentLog.requestUri || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="IP">{{ currentLog.ip }}</a-descriptions-item>
+        <a-descriptions-item label="错误信息">{{ currentLog.errorMsg || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="扩展信息">{{ currentLog.extra || '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-drawer>
 

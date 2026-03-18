@@ -6,13 +6,32 @@ import { isMockEnabled, mockRequest, request } from '../http'
 import { getFilePreviewUrl } from '@/utils/file'
 import { formToCron } from '@/utils/cron'
 import { templateRows } from '../../mock/modules/template'
-import { taskRows } from '../../mock/modules/task'
 import { recordRows } from '../../mock/data'
 
 function toKey(item) {
   if (!item) return item
   const key = item.id ?? item.key
   return { ...item, key: String(key) }
+}
+
+/** 将后端任务响应统一为前端期望格式（与接口文档对齐） */
+function normalizeTaskRecord(raw) {
+  if (!raw) return raw
+  const r = raw?.data ?? raw
+  const deviceIds = r.deviceIds ?? (() => {
+    const list = r.deviceIdList ?? r.deviceList ?? []
+    return Array.isArray(list)
+      ? list.map((x) => (typeof x === 'object' && x != null ? Number(x.id ?? x.deviceId ?? x.key) : Number(x))).filter((n) => !Number.isNaN(n))
+      : []
+  })()
+  return {
+    ...r,
+    key: String(r.id ?? r.key ?? ''),
+    plan: r.plan ?? r.taskName ?? r.name,
+    team: r.team ?? r.organizationId,
+    owner: r.owner ?? r.userId,
+    deviceIds: deviceIds.length ? deviceIds : (r.deviceIds ?? []),
+  }
 }
 
 // ---------- 巡检模板 ----------
@@ -199,21 +218,6 @@ export function buildTaskPayload(data) {
 }
 
 export function getTaskPage(params = {}) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      let list = [...taskRows]
-      const { enabled, keyword, pageNumber = 1, pageSize = 20 } = params
-      if (enabled !== undefined && enabled !== null) list = list.filter((r) => r.enabled === enabled)
-      if (keyword) {
-        const kw = String(keyword).toLowerCase()
-        list = list.filter((r) => r.plan?.toLowerCase().includes(kw))
-      }
-      const total = list.length
-      const start = (pageNumber - 1) * pageSize
-      list = list.slice(start, start + pageSize)
-      return { list: list.map(toKey), total }
-    })
-  }
   return request({
     url: '/inspection/task/page',
     method: 'get',
@@ -226,40 +230,36 @@ export function getTaskPage(params = {}) {
   }).then((data) => {
     const raw = data?.records ?? data?.list ?? []
     const total = data?.total ?? 0
-    return { list: raw.map(toKey), total }
+    return {
+      list: raw.map((r) => toKey(normalizeTaskRecord(r))),
+      total,
+      current: data?.current ?? params.pageNumber ?? 1,
+      size: data?.size ?? params.pageSize ?? 20,
+    }
   })
 }
 
 export function getTaskById(id) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      const r = taskRows.find((t) => String(t.key) === String(id))
-      return r ? toKey(r) : null
-    })
-  }
-  return request({ url: `/inspection/task/${id}`, method: 'get' }).then((data) => (data ? toKey(data) : null))
+  return request({ url: `/inspection/task/${id}`, method: 'get' }).then((data) =>
+    data ? toKey(normalizeTaskRecord(data)) : null
+  )
 }
 
 export function createTask(data) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ id: `${Date.now()}`, key: `${Date.now()}`, ...data }))
-  }
   const payload = buildTaskPayload(data)
-  return request({ url: '/inspection/task', method: 'post', data: payload })
+  return request({ url: '/inspection/task', method: 'post', data: payload }).then((data) =>
+    data ? toKey(normalizeTaskRecord(data)) : null
+  )
 }
 
 export function updateTask(id, data) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ id, ...data }))
-  }
   const payload = buildTaskPayload(data)
-  return request({ url: `/inspection/task/${id}`, method: 'put', data: payload })
+  return request({ url: `/inspection/task/${id}`, method: 'put', data: payload }).then((data) =>
+    data ? toKey(normalizeTaskRecord(data)) : null
+  )
 }
 
 export function deleteTask(id) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ success: true }))
-  }
   return request({ url: `/inspection/task/${id}`, method: 'delete' })
 }
 

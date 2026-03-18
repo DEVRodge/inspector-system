@@ -1,15 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { exceptionRows } from '@/mock/data'
-import { isMockEnabled } from '@/api/http'
 import {
   assignException as assignExceptionApi,
   getExceptionById,
   getExceptionPage,
+  processException as processExceptionApi,
 } from '@/api/modules/exception'
 
 export const useExceptionStore = defineStore('exception', () => {
-  const list = ref(isMockEnabled ? [...exceptionRows] : [])
+  const list = ref([])
 
   async function loadList(params = {}) {
     const res = await getExceptionPage(params)
@@ -17,31 +16,33 @@ export const useExceptionStore = defineStore('exception', () => {
     return res
   }
 
-  async function getById(id) {
+  async function getById(id, options = {}) {
+    const { forceFetch = false } = options
     const cached = list.value.find((e) => String(e.key) === String(id))
-    if (cached) return cached
-    if (isMockEnabled) {
-      return exceptionRows.find((e) => String(e.key) === String(id)) ?? null
-    }
+    if (cached && !forceFetch) return cached
     return getExceptionById(id)
   }
 
-  async function assign(id, handlerId, handlerName) {
-    if (isMockEnabled) {
-      const item = list.value.find((e) => String(e.key) === String(id))
-      if (!item) return false
-      item.handler = handlerName ?? '已指派'
-      item.status = '处理中'
-      return true
-    }
-    await assignExceptionApi(id, handlerId)
+  async function refreshOne(id) {
     const updated = await getExceptionById(id)
-    if (updated) {
-      const idx = list.value.findIndex((e) => String(e.key) === String(id))
-      if (idx >= 0) list.value[idx] = updated
-    }
+    if (!updated) return null
+    const idx = list.value.findIndex((e) => String(e.key) === String(id))
+    if (idx >= 0) list.value[idx] = updated
+    else list.value.unshift(updated)
+    return updated
+  }
+
+  async function assign(id, handlerId) {
+    await assignExceptionApi(id, handlerId)
+    await refreshOne(id)
     return true
   }
 
-  return { list, loadList, getById, assign }
+  async function process(id, payload) {
+    await processExceptionApi(id, payload)
+    await refreshOne(id)
+    return true
+  }
+
+  return { list, loadList, getById, assign, process, refreshOne }
 })

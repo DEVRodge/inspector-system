@@ -1,111 +1,100 @@
 /**
- * 异常管理接口
- * 对接后端 /inspection/exception/*
+ * 异常管理接口（严格对齐 /inspection/exception/*）
  */
-import { isMockEnabled, mockRequest, request } from '../http'
-import { exceptionRows } from '@/mock/data'
+import { request } from '../http'
 
-const STATUS_MAP = { PENDING: '待处理', PROCESSING: '处理中', CLOSED: '已处理' }
-const STATUS_TO_API = { 待处理: 'PENDING', 处理中: 'PROCESSING', 已处理: 'CLOSED' }
+export const EXCEPTION_STATUS_MAP = {
+  PENDING: '待处理',
+  PROCESSING: '处理中',
+  CLOSED: '已关闭',
+}
 
-function toKey(item) {
-  if (!item) return item
-  const key = item.id ?? item.key
-  const status = item.status
-  const statusDesc = STATUS_MAP[status] ?? status ?? item.statusDesc
+export const EXCEPTION_STATUS_OPTIONS = [
+  { value: 'PENDING', label: '待处理' },
+  { value: 'PROCESSING', label: '处理中' },
+  { value: 'CLOSED', label: '已关闭' },
+]
+
+function normalizeException(item) {
+  if (!item) return null
+  const statusApi = item.status
+  const statusDesc = item.statusDesc ?? EXCEPTION_STATUS_MAP[statusApi] ?? statusApi ?? ''
   return {
     ...item,
-    key: String(key),
-    code: item.exceptionNo ?? item.code,
-    device: item.deviceCode ?? item.device,
-    desc: item.description ?? item.desc,
+    key: String(item.id ?? item.key ?? ''),
+    id: item.id ?? item.key,
+    code: item.exceptionNo ?? item.code ?? '',
+    exceptionNo: item.exceptionNo ?? item.code ?? '',
+    device: item.deviceCode ?? item.device ?? '',
+    deviceCode: item.deviceCode ?? item.device ?? '',
+    desc: item.description ?? item.desc ?? '',
+    description: item.description ?? item.desc ?? '',
+    handlerName: item.handlerName ?? '',
     handler: item.handlerName ?? item.handler ?? '',
+    statusApi,
     status: statusDesc,
-    statusApi: status,
+    statusDesc,
+    files: Array.isArray(item.files) ? item.files : [],
+    recordDeviceFiles: Array.isArray(item.recordDeviceFiles) ? item.recordDeviceFiles : [],
   }
 }
 
-export function getExceptionPage(params = {}) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      let list = [...exceptionRows]
-      const { keyword, status, pageNumber = 1, pageSize = 20 } = params
-      if (keyword) {
-        const kw = String(keyword).toLowerCase()
-        list = list.filter(
-          (r) =>
-            (r.code && r.code.toLowerCase().includes(kw)) ||
-            (r.device && r.device.toLowerCase().includes(kw)) ||
-            (r.deviceName && r.deviceName.toLowerCase().includes(kw)),
-        )
-      }
-      if (status) {
-        const apiStatus = STATUS_TO_API[status] ?? status
-        list = list.filter((r) => (STATUS_TO_API[r.status] ?? r.status) === apiStatus)
-      }
-      const total = list.length
-      const start = (pageNumber - 1) * pageSize
-      list = list.slice(start, start + pageSize)
-      return { list: list.map(toKey), total }
-    })
+function cleanParams(params = {}) {
+  const clean = {}
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') clean[k] = v
   }
+  return clean
+}
 
+export function getExceptionPage(params = {}) {
+  const onlyMine = !!params.onlyMine
+  const url = onlyMine ? '/inspection/exception/my-page' : '/inspection/exception/page'
   return request({
-    url: '/inspection/exception/page',
+    url,
     method: 'get',
-    params: {
+    params: cleanParams({
       pageNumber: params.pageNumber ?? 1,
       pageSize: params.pageSize ?? 20,
-      keyword: params.keyword || undefined,
-      status: params.status ? STATUS_TO_API[params.status] ?? params.status : undefined,
+      keyword: params.keyword,
+      status: params.status,
       'period.begin': params.periodBegin,
       'period.end': params.periodEnd,
       onlyMine: params.onlyMine,
-    },
+    }),
   }).then((data) => {
-    const raw = data?.records ?? data?.list ?? []
-    const total = data?.total ?? 0
-    return { list: raw.map(toKey), total }
+    const records = data?.records ?? data?.list ?? []
+    return {
+      list: (Array.isArray(records) ? records : []).map(normalizeException),
+      total: Number(data?.total ?? 0),
+      current: Number(data?.current ?? params.pageNumber ?? 1),
+      size: Number(data?.size ?? params.pageSize ?? 20),
+    }
   })
 }
 
 export function getExceptionById(id) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      const r = exceptionRows.find((e) => String(e.key) === String(id))
-      return r ? toKey({ ...r, files: [], recordDeviceFiles: [] }) : null
-    })
-  }
-
   return request({ url: `/inspection/exception/${id}`, method: 'get' }).then((data) =>
-    data ? toKey(data) : null,
+    data ? normalizeException(data) : null,
   )
 }
 
 export function assignException(exceptionId, handlerId) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({}))
-  }
-
   return request({
     url: '/inspection/exception/assign',
     method: 'post',
-    data: { exceptionId: Number(exceptionId), handlerId: Number(handlerId) },
+    data: { exceptionId: String(exceptionId), handlerId: String(handlerId) },
   })
 }
 
 export function processException(exceptionId, data = {}) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({}))
-  }
-
   return request({
     url: '/inspection/exception/process',
     method: 'post',
     data: {
-      exceptionId: Number(exceptionId),
+      exceptionId: String(exceptionId),
       processResult: data.processResult,
-      fileIds: data.fileIds,
+      fileIds: (data.fileIds ?? []).map((id) => String(id)),
     },
   })
 }

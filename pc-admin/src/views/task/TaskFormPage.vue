@@ -4,22 +4,18 @@ import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { getOrganizationsList, getOrganizationById } from '@/api/modules/organization'
-import { getUsers } from '@/api/modules/user'
-import { getDevicePage } from '@/api/modules/equipment'
-import { isMockEnabled } from '@/api/http'
+import { getUserById, getUsers } from '@/api/modules/user'
+import { getDeviceById, getDevicePage } from '@/api/modules/equipment'
+import { getDictionaryList } from '@/api/modules/dictionary'
 import { useTaskStore } from '@/stores/task'
 import { buildTaskPayload } from '@/api/modules/inspection'
 import { cronToForm } from '@/utils/cron'
-import {
-  TASK_CYCLES,
-  WEEKDAYS,
-  equipmentRows,
-  getDevicesByKeys,
-} from '@/mock/modules/task'
+import { TASK_CYCLES, WEEKDAYS } from '@/constants/task'
 
 const route = useRoute()
 const router = useRouter()
 const taskStore = useTaskStore()
+const DEVICE_TYPE_DICT_CODE = 'device_type'
 
 const isEdit = computed(() => Boolean(route.params.id))
 
@@ -36,67 +32,84 @@ const formState = reactive({
   deviceKeys: [],
 })
 
-function formatPeriodTime(r) {
-  const c = (r.cycle ?? '').toLowerCase()
-  if (c === 'once') return r.executeAt ?? '-'
-  if (c === 'weekly' && r.cycleExtra?.weekday != null) {
-    const w = WEEKDAYS.find((d) => d.value === r.cycleExtra.weekday)
-    return `${w?.label ?? ''} ${r.time ?? ''}`
-  }
-  if (c === 'monthly' && r.cycleExtra?.day != null) {
-    return `每月${r.cycleExtra.day}日 ${r.time ?? ''}`
-  }
-  if (c === 'quarterly') return `每季度第 1 天 ${r.time ?? ''}`
-  if (c === 'yearly' && r.cycleExtra?.month != null && r.cycleExtra?.day != null) {
-    return `每年${r.cycleExtra.month}月${r.cycleExtra.day}日 ${r.time ?? ''}`
-  }
-  if (c === 'yearly') return `每年 ${r.time ?? ''}`
-  return r.time ?? '-'
-}
-
-const allDevices = ref([])
-
-const equipmentTypes = computed(() => {
-  const set = new Set(allDevices.value.map((e) => e.type))
-  return Array.from(set)
-})
+const isHydrating = ref(false)
+const deviceTypeOptions = ref([])
+const deviceRows = ref([])
+const selectedDeviceRecords = ref([])
+const deviceTableLoading = ref(false)
 
 const selectedType = ref(null)
-const devicesOfType = computed(() => {
-  if (!selectedType.value) return []
-  return allDevices.value.filter((e) => e.type === selectedType.value)
+const deviceListPagination = reactive({ current: 1, pageSize: 10, total: 0 })
+watch(selectedType, () => {
+  deviceListPagination.current = 1
+  loadDevicePage()
 })
+function onDeviceTableChange(pag) {
+  if (pag && typeof pag.current === 'number') {
+    deviceListPagination.current = pag.current
+    deviceListPagination.pageSize = pag.pageSize ?? deviceListPagination.pageSize
+  }
+  loadDevicePage()
+}
 
 const selectedRowKeys = computed(() => {
   if (!selectedType.value) return []
-  const typeKeys = new Set(devicesOfType.value.map((e) => String(e.key ?? e.id)))
+  const typeKeys = new Set(deviceRows.value.map((e) => String(e.key ?? e.id)))
   return formState.deviceKeys.filter((k) => typeKeys.has(String(k)))
 })
 
-function onDeviceSelectionChange(keys) {
-  const currentTypeKeySet = new Set(devicesOfType.value.map((e) => String(e.key ?? e.id)))
-  const otherKeys = formState.deviceKeys.filter((k) => !currentTypeKeySet.has(String(k)))
-  formState.deviceKeys = [...otherKeys, ...keys]
+function mergeSelectedDeviceRecords(records = []) {
+  const map = new Map(selectedDeviceRecords.value.map((item) => [String(item.id ?? item.key), item]))
+  for (const record of records) {
+    if (!record) continue
+    map.set(String(record.id ?? record.key), record)
+  }
+  selectedDeviceRecords.value = Array.from(map.values())
+  mergeDeviceTypeOptionsFromDevices(selectedDeviceRecords.value)
 }
 
-const selectedDevices = computed(() => {
-  const keys = formState.deviceKeys
-  if (isMockEnabled) return getDevicesByKeys(keys)
-  return allDevices.value.filter((e) => keys.includes(String(e.key ?? e.id)))
+function mergeDeviceTypeOptionsFromDevices(records = []) {
+  const exists = new Set(deviceTypeOptions.value.map((item) => item.value))
+  for (const record of records) {
+    const value = record?.type
+    if (!value || exists.has(value)) continue
+    deviceTypeOptions.value.push({ value, label: value })
+    exists.add(value)
+  }
+}
+
+const selectedDeviceMap = computed(() => {
+  const map = new Map()
+  for (const item of selectedDeviceRecords.value) {
+    map.set(String(item.id ?? item.key), item)
+  }
+  return map
 })
+
+const selectedDevices = computed(() =>
+  formState.deviceKeys.map((key) =>
+    selectedDeviceMap.value.get(String(key)) ?? {
+      key: String(key),
+      id: key,
+      code: `#${key}`,
+      name: '设备信息加载中',
+      type: '',
+    },
+  ),
+)
+
+function onDeviceSelectionChange(keys, selectedRows) {
+  const currentPageKeySet = new Set(deviceRows.value.map((e) => String(e.key ?? e.id)))
+  const otherKeys = formState.deviceKeys.filter((k) => !currentPageKeySet.has(String(k)))
+  formState.deviceKeys = [...otherKeys, ...keys.map(String)]
+  mergeSelectedDeviceRecords(selectedRows)
+}
 
 const teamOptions = ref([])
 const ownerOptions = ref([])
+const ownerLoading = ref(false)
 
 async function loadOrganizations() {
-  if (isMockEnabled) {
-    teamOptions.value = [
-      { value: '1', label: '运维部' },
-      { value: '2', label: '设备部' },
-      { value: '3', label: '信息部' },
-    ]
-    return
-  }
   try {
     const data = await getOrganizationsList()
     const inner = data?.data ?? data
@@ -120,33 +133,122 @@ function flattenOrgTree(nodes, result = []) {
   return result
 }
 
-async function loadUsers() {
-  if (isMockEnabled) {
-    ownerOptions.value = [
-      { value: '1', label: '张三' },
-      { value: '2', label: '李四' },
-      { value: '3', label: '王五' },
-      { value: '4', label: '王工' },
-    ]
+async function ensureOwnerOptionIncluded(ownerId) {
+  if (!ownerId) return
+  const sid = String(ownerId)
+  if (ownerOptions.value.some((o) => String(o.value) === sid)) return
+  try {
+    const user = await getUserById(ownerId)
+    const data = user?.data ?? user
+    const label = data?.name ?? data?.username ?? sid
+    ownerOptions.value = [...ownerOptions.value, { value: sid, label }]
+  } catch {
+    ownerOptions.value = [...ownerOptions.value, { value: sid, label: `用户 ${ownerId}` }]
+  }
+}
+
+function normalizeUserList(res) {
+  if (!res) return []
+  if (Array.isArray(res)) return res
+  const inner = res?.data ?? res
+  const list = inner?.records ?? inner?.list ?? res?.records ?? res?.list
+  return Array.isArray(list) ? list : []
+}
+
+async function loadUsers(organizationId = formState.team, options = {}) {
+  const { includeUserId } = options
+  const orgId = organizationId != null && organizationId !== '' ? Number(organizationId) : undefined
+  if (!orgId && !includeUserId) {
+    ownerOptions.value = []
     return
   }
+  ownerLoading.value = true
   try {
-    const res = await getUsers({ pageNumber: 1, pageSize: 999 })
-    const inner = res?.data ?? res
-    const arr = inner?.records ?? inner?.list ?? res?.records ?? res?.list ?? []
-    ownerOptions.value = (arr || []).map((u) => ({
+    const params = {
+      pageNumber: 1,
+      pageSize: 200,
+      ...(orgId ? { organizationId: orgId } : {}),
+    }
+    const res = await getUsers(params)
+    const arr = normalizeUserList(res)
+    ownerOptions.value = arr.map((u) => ({
       value: String(u.id ?? ''),
       label: u.name ?? u.username ?? String(u.id ?? ''),
     }))
+    if (includeUserId) await ensureOwnerOptionIncluded(includeUserId)
   } catch (e) {
     ownerOptions.value = []
     message.warning('加载负责人列表失败，请检查用户接口或稍后重试')
+  } finally {
+    ownerLoading.value = false
+  }
+}
+
+async function loadDeviceTypes() {
+  try {
+    const data = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
+    const arr = Array.isArray(data) ? data : data?.data ?? data?.list ?? []
+    deviceTypeOptions.value = (arr || [])
+      .map((item) => ({
+        value: item.value ?? item.code,
+        label: item.name ?? item.label ?? item.value ?? item.code,
+      }))
+      .filter((item) => item.value)
+  } catch {
+    deviceTypeOptions.value = []
+  }
+  mergeDeviceTypeOptionsFromDevices(selectedDeviceRecords.value)
+}
+
+async function hydrateSelectedDevices(keys = formState.deviceKeys) {
+  const missingIds = keys
+    .map(String)
+    .filter((id) => !selectedDeviceMap.value.has(id))
+  if (!missingIds.length) return
+  const records = await Promise.all(missingIds.map((id) => getDeviceById(id).catch(() => null)))
+  mergeSelectedDeviceRecords(records.filter(Boolean))
+}
+
+function ensureSelectedTypeForDeviceKeys() {
+  const firstSelected = selectedDevices.value.find((item) => item?.type)
+  if (firstSelected?.type) {
+    selectedType.value = firstSelected.type
+    return
+  }
+  if (!selectedType.value && deviceTypeOptions.value.length > 0) {
+    selectedType.value = deviceTypeOptions.value[0].value
+  }
+}
+
+async function loadDevicePage() {
+  if (!selectedType.value) {
+    deviceRows.value = []
+    deviceListPagination.total = 0
+    return
+  }
+  deviceTableLoading.value = true
+  try {
+    const res = await getDevicePage({
+      pageNumber: deviceListPagination.current,
+      pageSize: deviceListPagination.pageSize,
+      type: selectedType.value,
+    })
+    deviceRows.value = res?.list ?? []
+    deviceListPagination.total = res?.total ?? 0
+    mergeSelectedDeviceRecords(deviceRows.value.filter((item) => formState.deviceKeys.includes(String(item.id ?? item.key))))
+  } catch {
+    deviceRows.value = []
+    deviceListPagination.total = 0
+    message.warning('加载设备列表失败，请稍后重试')
+  } finally {
+    deviceTableLoading.value = false
   }
 }
 
 watch(
   () => formState.cycle,
   (cycle) => {
+    if (isHydrating.value) return
     const c = (cycle ?? '').toLowerCase()
     formState.time = c === 'once' ? null : '08:00'
     formState.executeAt = c === 'once' ? dayjs().format('YYYY-MM-DD HH:mm') : null
@@ -160,12 +262,15 @@ watch(
 watch(
   () => formState.team,
   () => {
+    if (isHydrating.value) return
     formState.owner = undefined
-    loadUsers()
+    loadUsers(formState.team)
   },
 )
 
 function fillForm(record) {
+  selectedDeviceRecords.value = []
+  selectedType.value = null
   if (record) {
     let cycle = record.cycle ?? 'DAILY'
     let time = record.time ?? '08:00'
@@ -187,17 +292,25 @@ function fillForm(record) {
         executeAt = dayjs(parsed.executeAt)
       }
     }
+    const deviceIds = record.deviceIds ?? record.deviceKeys ?? (() => {
+      const list = record.deviceIdList ?? record.deviceList ?? []
+      return Array.isArray(list)
+        ? list.map((x) => String(typeof x === 'object' && x != null ? x.id ?? x.deviceId ?? x.key : x))
+        : []
+    })()
+    const teamVal = record.team ?? record.organizationId
+    const ownerVal = record.owner ?? record.userId
     Object.assign(formState, {
       key: record.key,
-      plan: record.plan,
+      plan: record.plan ?? record.taskName ?? record.name,
       cycle,
       time,
       cycleExtra,
       executeAt,
-      team: record.team != null ? String(record.team) : undefined,
-      owner: record.owner != null ? String(record.owner) : undefined,
+      team: teamVal != null && teamVal !== '' ? String(teamVal) : undefined,
+      owner: ownerVal != null && ownerVal !== '' ? String(ownerVal) : undefined,
       enabled: record.enabled !== false,
-      deviceKeys: [...(record.deviceIds ?? record.deviceKeys ?? [])],
+      deviceKeys: [...deviceIds.map(String)],
     })
   } else {
     Object.assign(formState, {
@@ -215,21 +328,8 @@ function fillForm(record) {
   }
 }
 
-async function loadDevices() {
-  if (isMockEnabled) {
-    allDevices.value = equipmentRows
-    return
-  }
-  try {
-    const res = await getDevicePage({ pageNumber: 1, pageSize: 999 })
-    allDevices.value = res?.list ?? []
-  } catch {
-    allDevices.value = []
-  }
-}
-
 async function ensureTeamOptionIncluded(teamId) {
-  if (!teamId || isMockEnabled) return
+  if (!teamId) return
   const sid = String(teamId)
   const exists = teamOptions.value.some((o) => String(o.value) === sid)
   if (exists) return
@@ -244,19 +344,27 @@ async function ensureTeamOptionIncluded(teamId) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadOrganizations(), loadDevices()])
+  await Promise.all([loadOrganizations(), loadDeviceTypes()])
   if (isEdit.value && route.params.id) {
-    const record = await taskStore.getById(route.params.id)
+    const record = await taskStore.getById(route.params.id, { forceFetch: true })
     if (record) {
+      isHydrating.value = true
       fillForm(record)
       await ensureTeamOptionIncluded(formState.team)
-      await loadUsers()
+      await loadUsers(formState.team, { includeUserId: formState.owner })
+      await hydrateSelectedDevices()
+      ensureSelectedTypeForDeviceKeys()
+      isHydrating.value = false
+      await loadDevicePage()
     } else {
       message.warning('任务不存在')
     }
   } else {
+    isHydrating.value = true
     fillForm(null)
-    await loadUsers()
+    ensureSelectedTypeForDeviceKeys()
+    isHydrating.value = false
+    await loadDevicePage()
   }
 })
 
@@ -292,20 +400,13 @@ async function submit() {
     }
   }
 
-  const deviceIds = selectedDevices.value.map((d) => Number(d.id ?? d.key)).filter((n) => !Number.isNaN(n))
+  const deviceIds = formState.deviceKeys.map((id) => Number(id)).filter((n) => !Number.isNaN(n))
   const formData = {
     ...formState,
     executeAt: formState.executeAt ? dayjs(formState.executeAt).format('YYYY-MM-DD HH:mm') : null,
     deviceIds,
   }
   const payload = buildTaskPayload(formData)
-  Object.assign(payload, {
-    devices: deviceIds.length,
-    cycleLabel: TASK_CYCLES.find((c2) => String(c2.value).toLowerCase() === c)?.label ?? formState.cycle,
-    timeDisplay: c === 'once'
-      ? dayjs(formState.executeAt).format('YYYY-MM-DD HH:mm')
-      : formatPeriodTime(formState),
-  })
 
   try {
     if (isEdit.value && route.params.id) {
@@ -342,33 +443,43 @@ async function submit() {
             <div class="device-types-col">
               <div class="device-types-title">设备类型</div>
               <a-list
-                :data-source="equipmentTypes"
+                :data-source="deviceTypeOptions"
                 size="small"
                 :locale="{ emptyText: '暂无类型' }"
               >
                 <template #renderItem="{ item }">
                   <a-list-item
                     class="device-type-item"
-                    :class="{ active: selectedType === item }"
-                    @click="selectedType = item"
+                    :class="{ active: selectedType === item.value }"
+                    @click="selectedType = item.value"
                   >
-                    {{ item }}
+                    {{ item.label }}
                   </a-list-item>
                 </template>
               </a-list>
             </div>
             <div class="device-list-col">
-              <div class="device-list-title">{{ selectedType ? `${selectedType} - 设备列表` : '请先选择左侧设备类型' }}</div>
+              <div class="device-list-title">
+                {{ selectedType ? `${deviceTypeOptions.find((item) => item.value === selectedType)?.label ?? selectedType} - 设备列表` : '请先选择左侧设备类型' }}
+              </div>
               <a-table
                 v-if="selectedType"
-                :data-source="devicesOfType"
+                :data-source="deviceRows"
+                :loading="deviceTableLoading"
                 :row-selection="{
                   selectedRowKeys,
                   onChange: onDeviceSelectionChange,
                 }"
-                :pagination="false"
+                :pagination="{
+                  current: deviceListPagination.current,
+                  pageSize: deviceListPagination.pageSize,
+                  total: deviceListPagination.total,
+                  showSizeChanger: true,
+                  showTotal: (t) => `共 ${t} 条`,
+                }"
                 row-key="key"
                 size="small"
+                @change="onDeviceTableChange"
               >
                 <a-table-column title="设备编码" data-index="code" key="code" width="120" />
                 <a-table-column title="设备名称" data-index="name" key="name" />
@@ -461,10 +572,13 @@ async function submit() {
         <a-form-item label="负责人">
           <a-select
             v-model:value="formState.owner"
-            placeholder="请选择负责人（用户）"
+            placeholder="请先选择责任部门，再选择负责人"
             :options="ownerOptions"
+            :loading="ownerLoading"
             allow-clear
             style="width: 100%"
+            :disabled="!formState.team"
+            @dropdown-visible-change="(open) => { if (open && formState.team) loadUsers(formState.team) }"
           />
         </a-form-item>
         <a-form-item label="是否启用">

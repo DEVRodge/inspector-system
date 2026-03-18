@@ -2,8 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { recordRows } from '../../mock/data'
-import { getAssignableUserTree } from '../../api/modules/assign'
+import { getUsers } from '../../api/modules/user'
+import { uploadFile } from '../../api/modules/file'
 import { getFilePreviewUrl } from '../../utils/file'
 import { useExceptionStore } from '../../stores/exception'
 
@@ -14,13 +14,18 @@ const exceptionStore = useExceptionStore()
 const exception = ref(null)
 const loading = ref(false)
 
-const record = computed(() => {
-  const rid = exception.value?.recordId
-  if (!rid) return null
-  return recordRows.find((r) => String(r.key) === String(rid)) ?? null
-})
+const assignModalOpen = ref(false)
+const selectedHandler = ref(undefined)
+const handlerOptions = ref([])
+const assignLoading = ref(false)
 
-const previewUrls = computed(() => {
+const processModalOpen = ref(false)
+const processResult = ref('')
+const processFileIds = ref([])
+const processUploadList = ref([])
+const processSubmitting = ref(false)
+
+const allPhotoUrls = computed(() => {
   const ex = exception.value
   if (!ex) return []
   const files = [...(ex.files ?? []), ...(ex.recordDeviceFiles ?? [])]
@@ -28,37 +33,36 @@ const previewUrls = computed(() => {
   return files.map((f) => getFilePreviewUrl(f, base)).filter(Boolean)
 })
 
-const assignModalOpen = ref(false)
-const selectedHandler = ref(undefined)
-const assignTreeData = ref([])
-const assignTreeLoading = ref(false)
-
-function findNodeTitle(tree, value) {
-  for (const node of tree || []) {
-    if (node.value === value || String(node.value) === String(value)) return node.title
-    if (node.children) {
-      const found = findNodeTitle(node.children, value)
-      if (found) return found
-    }
-  }
-  return ''
-}
-
 function goBack() {
   router.push('/exceptions')
+}
+
+async function refreshException(forceFetch = true) {
+  if (!route.params.id) return
+  exception.value = await exceptionStore.getById(route.params.id, { forceFetch })
+}
+
+async function loadAssignableUsers() {
+  assignLoading.value = true
+  try {
+    const res = await getUsers({ pageNumber: 1, pageSize: 500, enabled: true })
+    const arr = res?.records ?? res?.list ?? (Array.isArray(res) ? res : [])
+    handlerOptions.value = arr.map((u) => ({
+      value: String(u.id ?? ''),
+      label: u.name ?? u.username ?? String(u.id ?? ''),
+    }))
+  } catch {
+    handlerOptions.value = []
+    message.error('加载可指派用户失败')
+  } finally {
+    assignLoading.value = false
+  }
 }
 
 async function openAssignModal() {
   selectedHandler.value = undefined
   assignModalOpen.value = true
-  assignTreeLoading.value = true
-  try {
-    assignTreeData.value = await getAssignableUserTree()
-  } catch {
-    assignTreeData.value = []
-  } finally {
-    assignTreeLoading.value = false
-  }
+  await loadAssignableUsers()
 }
 
 function closeAssignModal() {
@@ -68,21 +72,82 @@ function closeAssignModal() {
 
 async function confirmAssign() {
   if (!exception.value || !selectedHandler.value) {
-    message.warning('请选择执行人')
+    message.warning('请选择处理人')
     return
   }
-  const handlerName = findNodeTitle(assignTreeData.value, selectedHandler.value)
-  await exceptionStore.assign(exception.value.key, selectedHandler.value, handlerName)
-  exception.value = await exceptionStore.getById(exception.value.key)
-  message.success('指派成功')
-  closeAssignModal()
+  try {
+    await exceptionStore.assign(exception.value.key, selectedHandler.value)
+    await refreshException(true)
+    message.success('指派成功')
+    closeAssignModal()
+  } catch {
+    message.error('指派失败，请稍后重试')
+  }
+}
+
+function openProcessModal() {
+  processResult.value = ''
+  processFileIds.value = []
+  processUploadList.value = []
+  processModalOpen.value = true
+}
+
+function closeProcessModal() {
+  processModalOpen.value = false
+}
+
+async function handleUpload({ file, onSuccess, onError }) {
+  try {
+    const rawFile = file?.originFileObj ?? file
+    const saved = await uploadFile(rawFile)
+    const base = import.meta.env.VITE_API_BASE_URL || ''
+    processFileIds.value = [...processFileIds.value, String(saved.id)]
+    processUploadList.value = [
+      ...processUploadList.value,
+      {
+        uid: String(saved.id),
+        name: saved.name ?? rawFile?.name ?? file?.name,
+        status: 'done',
+        url: getFilePreviewUrl(saved, base),
+        fileId: String(saved.id),
+      },
+    ]
+    onSuccess?.(saved)
+  } catch (err) {
+    onError?.(err)
+    message.error('上传失败，请重试')
+  }
+}
+
+function removeUpload(file) {
+  const fileId = String(file.fileId ?? file.uid ?? '')
+  processFileIds.value = processFileIds.value.filter((id) => String(id) !== fileId)
+  processUploadList.value = processUploadList.value.filter((f) => String(f.uid) !== String(file.uid))
+  return true
+}
+
+async function confirmProcess() {
+  if (!exception.value) return
+  processSubmitting.value = true
+  try {
+    await exceptionStore.process(exception.value.key, {
+      processResult: processResult.value?.trim() || undefined,
+      fileIds: processFileIds.value,
+    })
+    await refreshException(true)
+    message.success('处理结果已提交')
+    closeProcessModal()
+  } catch {
+    message.error('提交失败，请稍后重试')
+  } finally {
+    processSubmitting.value = false
+  }
 }
 
 onMounted(async () => {
-  const id = route.params.id
   loading.value = true
   try {
-    exception.value = await exceptionStore.getById(id)
+    await refreshException(true)
   } finally {
     loading.value = false
   }
@@ -109,10 +174,12 @@ onMounted(async () => {
         <a-descriptions-item label="设备编码">{{ exception.device }}</a-descriptions-item>
         <a-descriptions-item label="设备名称">{{ exception.deviceName || '-' }}</a-descriptions-item>
         <a-descriptions-item label="异常描述">{{ exception.desc }}</a-descriptions-item>
+        <a-descriptions-item label="截止时间">{{ exception.deadline || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="创建时间">{{ exception.createTime || '-' }}</a-descriptions-item>
         <a-descriptions-item label="处理人">
           {{ exception.handler || '未指派' }}
           <a-button
-            v-if="exception.status === '待处理'"
+            v-if="exception.statusApi === 'PENDING'"
             type="link"
             size="small"
             style="margin-left: 8px"
@@ -121,7 +188,20 @@ onMounted(async () => {
             指派
           </a-button>
         </a-descriptions-item>
-        <a-descriptions-item label="状态">{{ exception.status }}</a-descriptions-item>
+        <a-descriptions-item label="状态">
+          {{ exception.statusDesc || exception.status || '-' }}
+          <a-button
+            v-if="exception.statusApi === 'PROCESSING'"
+            type="link"
+            size="small"
+            style="margin-left: 8px"
+            @click="openProcessModal"
+          >
+            提交处理结果
+          </a-button>
+        </a-descriptions-item>
+        <a-descriptions-item label="处理结果">{{ exception.processResult || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="处理时间">{{ exception.processTime || '-' }}</a-descriptions-item>
       </a-descriptions>
 
       <a-modal
@@ -131,44 +211,51 @@ onMounted(async () => {
         @cancel="closeAssignModal"
       >
         <a-form-item label="处理人" required>
-          <a-tree-select
+          <a-select
             v-model:value="selectedHandler"
-            placeholder="请选择处理人（部门-岗位-人员）"
+            placeholder="请选择处理人"
             style="width: 100%"
-            :tree-data="assignTreeData"
-            :loading="assignTreeLoading"
-            tree-default-expand-all
+            :options="handlerOptions"
+            :loading="assignLoading"
             allow-clear
-            show-search
-            :tree-node-filter-prop="'title'"
           />
         </a-form-item>
       </a-modal>
 
-      <div class="detail-section">
-        <div class="detail-section__title">关联巡检结果</div>
-        <template v-if="record">
-          <a-descriptions :column="1" bordered size="small" class="record-meta">
-            <a-descriptions-item label="任务名称">{{ record.plan }}</a-descriptions-item>
-            <a-descriptions-item label="巡检人">{{ record.inspector }}</a-descriptions-item>
-            <a-descriptions-item label="提交时间">{{ record.submitTime }}</a-descriptions-item>
-          </a-descriptions>
-          <div v-if="record.items?.length" class="items-list">
-            <div v-for="(item, i) in record.items" :key="i" class="items-list__row">
-              <span class="items-list__name">{{ item.name }}</span>
-              <span class="items-list__value">{{ item.value }}</span>
-            </div>
-          </div>
-        </template>
-        <div v-else class="detail-empty">暂无关联巡检记录</div>
-      </div>
+      <a-modal
+        v-model:open="processModalOpen"
+        title="提交处理结果"
+        :confirm-loading="processSubmitting"
+        @ok="confirmProcess"
+        @cancel="closeProcessModal"
+      >
+        <a-form layout="vertical">
+          <a-form-item label="处理结果说明">
+            <a-textarea
+              v-model:value="processResult"
+              :rows="4"
+              placeholder="请输入处理结果（可选）"
+            />
+          </a-form-item>
+          <a-form-item label="处理结果照片">
+            <a-upload
+              :custom-request="handleUpload"
+              :file-list="processUploadList"
+              list-type="picture-card"
+              @remove="removeUpload"
+            >
+              <div>上传</div>
+            </a-upload>
+          </a-form-item>
+        </a-form>
+      </a-modal>
 
       <div class="detail-section">
-        <div class="detail-section__title">现场照片</div>
-        <div v-if="previewUrls.length || record?.photoUrls?.length" class="photo-grid">
+        <div class="detail-section__title">异常相关照片</div>
+        <div v-if="allPhotoUrls.length" class="photo-grid">
           <a-image-preview-group>
             <a-image
-              v-for="(url, i) in (previewUrls.length ? previewUrls : record.photoUrls)"
+              v-for="(url, i) in allPhotoUrls"
               :key="i"
               :src="url"
               :width="120"
@@ -209,33 +296,6 @@ onMounted(async () => {
 .detail-section__title {
   font-weight: 600;
   margin-bottom: 12px;
-  color: #1f2329;
-}
-
-.record-meta {
-  margin-bottom: 12px;
-}
-
-.items-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.items-list__row {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: #fafafa;
-  border-radius: 6px;
-}
-
-.items-list__name {
-  color: #4e5969;
-}
-
-.items-list__value {
-  font-weight: 500;
   color: #1f2329;
 }
 

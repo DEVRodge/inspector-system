@@ -1,13 +1,12 @@
-import { isMockEnabled, mockRequest, request } from '../http'
-import { getDashboardMockData } from '../../mock/modules/dashboard'
+import { request } from '../http'
 
+/**
+ * 工作台统计（严格按接口文档）
+ * GET /inspection/dashboard/stats
+ */
 export function getDashboardData() {
-  if (isMockEnabled) {
-    return mockRequest(getDashboardMockData)
-  }
-
   return request({
-    url: '/dashboard/overview',
+    url: '/inspection/dashboard/stats',
     method: 'get',
   })
 }

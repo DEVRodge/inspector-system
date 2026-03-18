@@ -10,9 +10,9 @@ const authStore = useAuthStore()
 const loading = ref(false)
 
 const formState = reactive({
-  username: 'admin',
-  password: '123456',
-  remember: true,
+  username: '',
+  password: '',
+  remember: false,
 })
 
 async function submit() {
@@ -89,21 +89,12 @@ async function submit() {
             </a-input-password>
           </a-form-item>
 
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px">
+          <div style="display: flex; align-items: center; margin-bottom: 24px">
             <a-checkbox v-model:checked="formState.remember">记住账号</a-checkbox>
-            <a-typography-link>忘记密码</a-typography-link>
           </div>
 
           <a-button type="primary" html-type="submit" size="large" block :loading="loading">登录系统</a-button>
         </a-form>
-
-        <a-alert
-          style="margin-top: 20px"
-          type="info"
-          show-icon
-          message="说明"
-          description="VITE_ENABLE_MOCK=true 时使用模拟登录；设为 false 并配置后端地址后对接真实接口。"
-        />
       </a-card>
     </section>
   </div>

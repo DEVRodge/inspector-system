@@ -6,51 +6,87 @@ import { getDashboardData } from '../../api/modules/dashboard'
 import brandLogo from '../../assets/logo.png'
 
 const loading = ref(false)
-const dashboard = ref({
-  overviewCards: [],
-  completionSummary: {},
-  taskDistribution: [],
-  deviceStatusDistribution: [],
-  personLoads: [],
-  todoList: [],
-  exceptionList: [],
-  taskList: [],
-  notices: [],
+const stats = ref({
+  totalDevices: 0,
+  devicesAddedThisMonth: 0,
+  todayTaskTotal: 0,
+  todayTaskCompleted: 0,
+  todayCompletionRate: 0,
+  monthTaskTotal: 0,
+  monthTaskCompleted: 0,
+  monthCompletionRate: 0,
+  pendingExceptionCount: 0,
+  unassignedExceptionCount: 0,
 })
 
-const taskColumns = [
-  { title: '任务名称', dataIndex: 'plan', key: 'plan' },
-  { title: '任务类型', dataIndex: 'type', key: 'type', width: 100 },
-  { title: '责任部门', dataIndex: 'team', key: 'team', width: 120 },
-  { title: '负责人', dataIndex: 'owner', key: 'owner', width: 100 },
-  { title: '设备数', dataIndex: 'devices', key: 'devices', width: 100 },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 120 },
-]
-
-const completionPercent = computed(() => {
-  const plannedTasks = dashboard.value.completionSummary.plannedTasks || 0
-  const completedTasks = dashboard.value.completionSummary.completedTasks || 0
-
-  if (!plannedTasks) {
-    return 0
-  }
-
-  return Number(((completedTasks / plannedTasks) * 100).toFixed(1))
-})
-
-function getTagColor(status) {
-  const statusColorMap = {
-    已完成: 'success',
-    执行中: 'processing',
-    待执行: 'warning',
-    已逾期: 'error',
-    处理中: 'processing',
-    待处理: 'warning',
-    已处理: 'success',
-  }
-
-  return statusColorMap[status] || 'default'
+function toNumber(value, fallback = 0) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
 }
+
+function normalizeRate(value) {
+  const n = toNumber(value)
+  // 文档定义为 0-100；兼容后端偶发返回 0-1 的场景
+  if (n > 0 && n <= 1) return n * 100
+  if (n < 0) return 0
+  if (n > 100) return 100
+  return n
+}
+
+function normalizeDashboardStats(res) {
+  const raw = res?.data ?? res ?? {}
+  return {
+    totalDevices: toNumber(raw.totalDevices),
+    devicesAddedThisMonth: toNumber(raw.devicesAddedThisMonth),
+    todayTaskTotal: toNumber(raw.todayTaskTotal),
+    todayTaskCompleted: toNumber(raw.todayTaskCompleted),
+    todayCompletionRate: normalizeRate(raw.todayCompletionRate),
+    monthTaskTotal: toNumber(raw.monthTaskTotal),
+    monthTaskCompleted: toNumber(raw.monthTaskCompleted),
+    monthCompletionRate: normalizeRate(raw.monthCompletionRate),
+    pendingExceptionCount: toNumber(raw.pendingExceptionCount),
+    unassignedExceptionCount: toNumber(raw.unassignedExceptionCount),
+  }
+}
+
+const overviewCards = computed(() => [
+  {
+    key: 'totalDevices',
+    title: '设备总数',
+    value: stats.value.totalDevices,
+    suffix: '台',
+    trend: `本月新增 ${stats.value.devicesAddedThisMonth} 台`,
+  },
+  {
+    key: 'todayTaskTotal',
+    title: '今日应执行任务',
+    value: stats.value.todayTaskTotal,
+    suffix: '项',
+    trend: `已完成 ${stats.value.todayTaskCompleted} 项`,
+  },
+  {
+    key: 'pendingExceptionCount',
+    title: '待处理异常',
+    value: stats.value.pendingExceptionCount,
+    suffix: '条',
+    trend: `待指派 ${stats.value.unassignedExceptionCount} 条`,
+  },
+  {
+    key: 'monthCompletionRate',
+    title: '本月完成率',
+    value: Number(stats.value.monthCompletionRate.toFixed(1)),
+    suffix: '%',
+    trend: `本月已完成 ${stats.value.monthTaskCompleted} / ${stats.value.monthTaskTotal}`,
+  },
+])
+
+const todayCompletionPercent = computed(() =>
+  Number(stats.value.todayCompletionRate.toFixed(1)),
+)
+
+const monthCompletionPercent = computed(() =>
+  Number(stats.value.monthCompletionRate.toFixed(1)),
+)
 
 const router = useRouter()
 
@@ -60,11 +96,11 @@ function handleCreateTask() {
 
 async function loadDashboard() {
   loading.value = true
-
   try {
-    dashboard.value = await getDashboardData()
+    const data = await getDashboardData()
+    stats.value = normalizeDashboardStats(data)
   } catch (error) {
-    message.error('首页数据加载失败，请稍后重试。')
+    message.error('工作台数据加载失败，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -86,7 +122,7 @@ onMounted(() => {
           <div class="dashboard-hero__meta">
             <div class="dashboard-hero__eyebrow">GOKIN SOLAR · PC 管理端</div>
             <h2>设备巡检数字化工作台</h2>
-            <p>聚焦设备资产、任务执行、异常闭环和待办协同，为企业运维管理提供统一入口。</p>
+            <p>工作台数据严格对齐接口：设备、任务完成率与异常统计均来自真实接口。</p>
           </div>
         </div>
 
@@ -98,10 +134,8 @@ onMounted(() => {
 
     <a-spin :spinning="loading">
       <div class="stats-grid page-section">
-        <a-card v-for="item in dashboard.overviewCards" :key="item.key" class="metric-card" :bordered="false">
+        <a-card v-for="item in overviewCards" :key="item.key" class="metric-card" :bordered="false">
           <a-statistic :title="item.title" :value="item.value" :suffix="item.suffix" />
-          <div class="metric-card__footer">{{ item.trend }}</div>
-          <div v-if="item.formula" class="metric-card__formula">{{ item.formula }}</div>
         </a-card>
       </div>
 
@@ -109,44 +143,43 @@ onMounted(() => {
         <a-card title="今日任务执行" :bordered="false">
           <div class="summary-grid">
             <div class="summary-grid__item">
-              <span>已完成任务</span>
-              <strong>{{ dashboard.completionSummary.completedTasks || 0 }}</strong>
-              <div class="summary-grid__formula">已完成任务 = 当日已提交巡检记录的任务数</div>
+              <span>今日应执行任务</span>
+              <strong>{{ stats.todayTaskTotal }}</strong>
             </div>
             <div class="summary-grid__item">
-              <span>应执行任务</span>
-              <strong>{{ dashboard.completionSummary.plannedTasks || 0 }}</strong>
-              <div class="summary-grid__formula">应执行任务 = 当日应执行的任务总数</div>
+              <span>今日已完成任务</span>
+              <strong>{{ stats.todayTaskCompleted }}</strong>
             </div>
             <div class="summary-grid__item">
-              <span>待处理异常</span>
-              <strong>{{ dashboard.completionSummary.pendingExceptions || 0 }}</strong>
-              <div class="summary-grid__formula">待处理异常 = 待处理状态的异常条数</div>
+              <span>今日完成率</span>
+              <strong>{{ todayCompletionPercent }}%</strong>
             </div>
           </div>
           <div style="margin-top: 16px">
-            <div class="subtle-label">总体完成进度</div>
-            <a-progress :percent="completionPercent" status="active" />
-            <div class="summary-grid__formula" style="margin-top: 8px">总体完成进度 = 已完成任务 / 应执行任务 × 100%</div>
+            <a-progress :percent="todayCompletionPercent" status="active" />
           </div>
         </a-card>
 
-        <a-card title="异常设备" :bordered="false">
-          <div class="detail-list">
-            <div v-for="item in dashboard.exceptionList.slice(0, 3)" :key="item.code" class="detail-list__item">
-              <strong>#{{ item.code }} · {{ item.device }}</strong>
-              <div>{{ item.desc }}</div>
-              <div class="subtle-text">处理人：{{ item.handler || '未指派' }}</div>
-              <div style="margin-top: 8px">
-                <a-tag :color="getTagColor(item.status)">{{ item.status }}</a-tag>
-              </div>
+        <a-card title="本月任务与异常" :bordered="false">
+          <div class="summary-grid">
+            <div class="summary-grid__item">
+              <span>本月应执行任务</span>
+              <strong>{{ stats.monthTaskTotal }}</strong>
             </div>
+            <div class="summary-grid__item">
+              <span>本月已完成任务</span>
+              <strong>{{ stats.monthTaskCompleted }}</strong>
+            </div>
+            <div class="summary-grid__item">
+              <span>待处理异常 / 待指派</span>
+              <strong>{{ stats.pendingExceptionCount }} / {{ stats.unassignedExceptionCount }}</strong>
+            </div>
+          </div>
+          <div style="margin-top: 16px">
+            <a-progress :percent="monthCompletionPercent" status="active" />
           </div>
         </a-card>
       </div>
-
-      <!-- 今日待办 & 今日任务明细区块已按需求移除 -->
-
     </a-spin>
   </div>
 </template>

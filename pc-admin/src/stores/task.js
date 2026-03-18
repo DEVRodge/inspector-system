@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { taskRows } from '@/mock/modules/task'
-import { isMockEnabled } from '@/api/http'
 import {
   createTask,
   deleteTask,
@@ -11,56 +9,45 @@ import {
 } from '@/api/modules/inspection'
 
 export const useTaskStore = defineStore('task', () => {
-  const list = ref(isMockEnabled ? [...taskRows] : [])
+  const list = ref([])
 
   async function loadList(params = {}) {
-    if (isMockEnabled) {
-      list.value = [...taskRows]
-      return { list: list.value, total: list.value.length }
-    }
     const res = await getTaskPage(params)
     list.value = res?.list ?? []
     return res
   }
 
-  async function getById(id) {
-    const cached = list.value.find((t) => String(t.key) === String(id) || String(t.id) === String(id))
-    if (cached) return cached
-    if (isMockEnabled) {
-      return taskRows.find((t) => String(t.key) === String(id)) ?? null
+  async function getById(id, options = {}) {
+    const { forceFetch = false } = options
+    if (!forceFetch) {
+      const cached = list.value.find((t) => String(t.key) === String(id) || String(t.id) === String(id))
+      if (cached) return cached
     }
     return getTaskById(id)
   }
 
   async function create(task) {
-    if (isMockEnabled) {
-      const key = task.key || `${Date.now()}`
-      list.value.unshift({ ...task, key })
-      return key
-    }
     const res = await createTask(task)
     const id = res?.id ?? res?.key
-    if (id) list.value.unshift({ ...task, key: id, id })
-    return id
+    if (res && id) {
+      list.value = [{ ...res, key: String(id), id }, ...list.value]
+    }
+    return res ?? id
   }
 
   async function update(id, task) {
+    const res = await updateTask(id, task)
     const index = list.value.findIndex((t) => String(t.key) === String(id) || String(t.id) === String(id))
-    if (index === -1) return false
-    if (!isMockEnabled) {
-      await updateTask(id, task)
+    if (index >= 0) {
+      list.value[index] = { ...list.value[index], ...(res ?? task), key: String(id), id }
     }
-    list.value[index] = { ...list.value[index], ...task, key: id, id }
-    return true
+    return res ?? true
   }
 
   async function remove(id) {
+    await deleteTask(id)
     const index = list.value.findIndex((t) => String(t.key) === String(id) || String(t.id) === String(id))
-    if (index === -1) return false
-    if (!isMockEnabled) {
-      await deleteTask(id)
-    }
-    list.value.splice(index, 1)
+    if (index >= 0) list.value.splice(index, 1)
     return true
   }
 

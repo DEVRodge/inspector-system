@@ -2,14 +2,12 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
-import {
-  TASK_CYCLES,
-  TASK_ENABLED_OPTIONS,
-  WEEKDAYS,
-  getDevicesByKeys,
-} from '@/mock/modules/task'
+import { TASK_CYCLES, TASK_ENABLED_OPTIONS, WEEKDAYS } from '@/constants/task'
+import { cronToForm } from '@/utils/cron'
 import { useTaskStore } from '@/stores/task'
-import { isMockEnabled } from '@/api/http'
+import { getOrganizationById, getOrganizationsList } from '@/api/modules/organization'
+import { getUserById } from '@/api/modules/user'
+import { getDeviceById } from '@/api/modules/equipment'
 
 const router = useRouter()
 const taskStore = useTaskStore()
@@ -19,20 +17,136 @@ const query = reactive({
   enabled: undefined,
   keyword: '',
 })
+const pagination = reactive({
+  current: 1,
+  pageSize: 20,
+  total: 0,
+})
 
-async function loadList() {
-  if (isMockEnabled) {
-    await taskStore.loadList()
-    return
+const teamNameMap = ref({})
+const ownerNameMap = ref({})
+const deviceListForDrawer = ref([])
+const detailVisible = ref(false)
+const currentRow = ref(null)
+
+function flattenOrgTree(nodes, result = []) {
+  for (const n of nodes || []) {
+    result.push({ id: n.id, name: n.name })
+    if (n.children?.length) flattenOrgTree(n.children, result)
   }
+  return result
+}
+
+async function loadOrganizationMap() {
+  try {
+    const orgRes = await getOrganizationsList()
+    const orgInner = orgRes?.data ?? orgRes
+    const orgArr = Array.isArray(orgInner) ? orgInner : orgInner?.list ?? orgRes?.list ?? []
+    const orgFlat = flattenOrgTree(orgArr)
+    const map = {}
+    for (const item of orgFlat) {
+      if (item.id != null) map[String(item.id)] = item.name ?? String(item.id)
+    }
+    teamNameMap.value = map
+  } catch {
+    teamNameMap.value = {}
+  }
+}
+
+async function ensureTeamName(teamId) {
+  if (teamId == null || teamNameMap.value[String(teamId)]) return
+  try {
+    const org = await getOrganizationById(teamId)
+    const data = org?.data ?? org
+    if (data?.id != null) {
+      teamNameMap.value = {
+        ...teamNameMap.value,
+        [String(data.id)]: data.name ?? String(data.id),
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function ensureOwnerName(ownerId) {
+  if (ownerId == null || ownerNameMap.value[String(ownerId)]) return
+  try {
+    const user = await getUserById(ownerId)
+    const data = user?.data ?? user
+    if (data?.id != null) {
+      ownerNameMap.value = {
+        ...ownerNameMap.value,
+        [String(data.id)]: data.name ?? data.username ?? String(data.id),
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function ensureNameMapsForRows(rows = []) {
+  const teams = [...new Set(rows.map((item) => item?.team).filter((item) => item != null))]
+  const owners = [...new Set(rows.map((item) => item?.owner).filter((item) => item != null))]
+  await Promise.all([
+    ...teams.map((teamId) => ensureTeamName(teamId)),
+    ...owners.map((ownerId) => ensureOwnerName(ownerId)),
+  ])
+}
+
+function formatPeriodTime(record) {
+  let rec = record
+  if (!record.time && record.cron) {
+    const parsed = cronToForm(record.cron)
+    if (parsed) rec = { ...record, ...parsed }
+  }
+  const cycle = (rec.cycle ?? '').toLowerCase()
+  if (cycle === 'once') return rec.executeAt ?? '-'
+  if (cycle === 'weekly' && rec.cycleExtra?.weekday != null) {
+    const weekday = WEEKDAYS.find((item) => item.value === rec.cycleExtra.weekday)
+    return `${weekday?.label ?? ''} ${rec.time ?? ''}`.trim()
+  }
+  if (cycle === 'monthly' && rec.cycleExtra?.day != null) {
+    return `每月${rec.cycleExtra.day}日 ${rec.time ?? ''}`.trim()
+  }
+  if (cycle === 'quarterly') return `每季度第 1 天 ${rec.time ?? ''}`.trim()
+  if (cycle === 'yearly' && rec.cycleExtra?.month != null && rec.cycleExtra?.day != null) {
+    return `每年${rec.cycleExtra.month}月${rec.cycleExtra.day}日 ${rec.time ?? ''}`.trim()
+  }
+  if (cycle === 'yearly') return `每年 ${rec.time ?? ''}`.trim()
+  return rec.time ?? '-'
+}
+
+const rows = computed(() =>
+  taskStore.list.map((record) => {
+    const cycle = (record.cycle ?? '').toLowerCase()
+    return {
+      ...record,
+      devices: (record.deviceIds ?? record.deviceKeys)?.length ?? 0,
+      cycleLabel: record.cycleLabel ?? TASK_CYCLES.find((item) => String(item.value).toLowerCase() === cycle)?.label ?? record.cycle,
+      timeDisplay: cycle === 'once' ? record.executeAt : formatPeriodTime(record),
+      teamName: record.teamName ?? (record.team != null ? teamNameMap.value[String(record.team)] : undefined),
+      ownerName: record.ownerName ?? (record.owner != null ? ownerNameMap.value[String(record.owner)] : undefined),
+    }
+  }),
+)
+
+const getDevicesForCurrentRow = computed(() => deviceListForDrawer.value)
+
+async function loadList(resetPage = false) {
+  if (resetPage) pagination.current = 1
   loading.value = true
   try {
-    await taskStore.loadList({
+    const res = await taskStore.loadList({
       enabled: query.enabled,
       keyword: query.keyword || undefined,
-      pageNumber: 1,
-      pageSize: 999,
+      pageNumber: pagination.current,
+      pageSize: pagination.pageSize,
     })
+    pagination.total = res?.total ?? 0
+    pagination.current = res?.current ?? pagination.current
+    pagination.pageSize = res?.size ?? pagination.pageSize
+    await ensureNameMapsForRows(res?.list ?? [])
   } catch {
     message.error('加载任务列表失败')
   } finally {
@@ -41,76 +155,49 @@ async function loadList() {
 }
 
 function onQuerySearch() {
+  loadList(true)
+}
+
+function onTableChange(pag) {
+  pagination.current = pag?.current ?? pagination.current
+  pagination.pageSize = pag?.pageSize ?? pagination.pageSize
   loadList()
 }
 
-function formatPeriodTime(r) {
-  const c = (r.cycle ?? '').toLowerCase()
-  if (c === 'once') return r.executeAt ?? '-'
-  if (c === 'weekly' && r.cycleExtra?.weekday != null) {
-    const w = WEEKDAYS.find((d) => d.value === r.cycleExtra.weekday)
-    return `${w?.label ?? ''} ${r.time ?? ''}`
+async function loadDevicesForIds(ids = []) {
+  if (!ids.length) {
+    deviceListForDrawer.value = []
+    return
   }
-  if (c === 'monthly' && r.cycleExtra?.day != null) {
-    return `每月${r.cycleExtra.day}日 ${r.time ?? ''}`
-  }
-  if (c === 'quarterly') return `每季度第 1 天 ${r.time ?? ''}`
-  if (c === 'yearly' && r.cycleExtra?.month != null && r.cycleExtra?.day != null) {
-    return `每年${r.cycleExtra.month}月${r.cycleExtra.day}日 ${r.time ?? ''}`
-  }
-  if (c === 'yearly') return `每年 ${r.time ?? ''}`
-  return r.time ?? '-'
+  const records = await Promise.all(ids.map((id) => getDeviceById(id).catch(() => null)))
+  deviceListForDrawer.value = records.filter(Boolean)
 }
-
-const deviceListForDrawer = ref([])
-
-const getDevicesForCurrentRow = computed(() => {
-  const row = currentRow.value
-  if (!row) return []
-  const ids = row.deviceIds ?? row.deviceKeys ?? []
-  if (isMockEnabled) return getDevicesByKeys(ids)
-  return deviceListForDrawer.value.filter((e) => ids.includes(Number(e.id ?? e.key)) || ids.includes(String(e.id ?? e.key)))
-})
-
-const rows = computed(() =>
-  taskStore.list.map((r) => {
-    const c = (r.cycle ?? '').toLowerCase()
-    return {
-      ...r,
-      devices: (r.deviceIds ?? r.deviceKeys)?.length ?? 0,
-      cycleLabel: r.cycleLabel ?? TASK_CYCLES.find((c2) => String(c2.value).toLowerCase() === c)?.label ?? r.cycle,
-      timeDisplay: c === 'once' ? r.executeAt : (r.timeDisplay ?? formatPeriodTime(r)),
-    }
-  }),
-)
-
-const filteredRows = computed(() =>
-  rows.value.filter((r) => {
-    const enabledMatch = query.enabled === undefined || query.enabled === null || r.enabled === query.enabled
-    const keywordMatch = !query.keyword || (r.plan && r.plan.toLowerCase().includes(query.keyword.toLowerCase()))
-    return enabledMatch && keywordMatch
-  }),
-)
-
-const detailVisible = ref(false)
-const currentRow = ref(null)
-
-onMounted(() => loadList())
 
 function openCreate() {
   router.push('/tasks/new')
 }
 
 async function openDetail(record) {
-  currentRow.value = record
-  detailVisible.value = true
-  if (!isMockEnabled) {
-    try {
-      const res = await import('@/api/modules/equipment').then((m) => m.getDevicePage({ pageNumber: 1, pageSize: 999 }))
-      deviceListForDrawer.value = res?.list ?? []
-    } catch {
-      deviceListForDrawer.value = []
+  try {
+    const full = await taskStore.getById(record.key ?? record.id, { forceFetch: true })
+    if (!full) {
+      message.warning('任务不存在')
+      return
     }
+    await ensureNameMapsForRows([full])
+    await loadDevicesForIds(full.deviceIds ?? [])
+    const cycle = (full.cycle ?? '').toLowerCase()
+    currentRow.value = {
+      ...full,
+      devices: (full.deviceIds ?? full.deviceKeys)?.length ?? 0,
+      cycleLabel: full.cycleLabel ?? TASK_CYCLES.find((item) => String(item.value).toLowerCase() === cycle)?.label ?? full.cycle,
+      timeDisplay: cycle === 'once' ? full.executeAt : formatPeriodTime(full),
+      teamName: full.teamName ?? (full.team != null ? teamNameMap.value[String(full.team)] : undefined),
+      ownerName: full.ownerName ?? (full.owner != null ? ownerNameMap.value[String(full.owner)] : undefined),
+    }
+    detailVisible.value = true
+  } catch {
+    message.error('加载任务详情失败')
   }
 }
 
@@ -126,12 +213,21 @@ function removeRow(record) {
         const id = record.id ?? record.key
         await taskStore.remove(id)
         message.success('任务已删除')
+        if (rows.value.length === 1 && pagination.current > 1) {
+          pagination.current -= 1
+        }
+        await loadList()
       } catch {
         message.error('删除失败，请稍后重试')
       }
     },
   })
 }
+
+onMounted(async () => {
+  await loadOrganizationMap()
+  await loadList()
+})
 </script>
 
 <template>
@@ -164,10 +260,22 @@ function removeRow(record) {
             {{ o.label }}
           </a-select-option>
         </a-select>
-        <a-button v-if="!isMockEnabled" type="primary" @click="onQuerySearch">查询</a-button>
+        <a-button type="primary" @click="onQuerySearch">查询</a-button>
       </div>
 
-      <a-table :data-source="filteredRows" :loading="loading" :pagination="false" row-key="key">
+      <a-table
+        :data-source="rows"
+        :loading="loading"
+        :pagination="{
+          current: pagination.current,
+          pageSize: pagination.pageSize,
+          total: pagination.total,
+          showSizeChanger: true,
+          showTotal: (t) => `共 ${t} 条`,
+        }"
+        row-key="key"
+        @change="onTableChange"
+      >
         <a-table-column title="任务名称" data-index="plan" key="plan" />
         <a-table-column title="执行周期" data-index="cycleLabel" key="cycleLabel" width="100" />
         <a-table-column title="责任部门" data-index="team" key="team" width="110">
@@ -209,7 +317,7 @@ function removeRow(record) {
           <a-table
             :data-source="getDevicesForCurrentRow"
             :pagination="false"
-            row-key="key"
+            row-key="id"
             size="small"
           >
             <a-table-column title="设备编码" data-index="code" key="code" width="120" />
