@@ -10,9 +10,18 @@ export function getOrganizations(params = {}) {
 
 /**
  * 查询组织机构列表（扁平）
+ * @param {{ name?: string, enabled?: boolean }} params - 服务端筛选（若后端支持）
  */
-export function getOrganizationsList() {
-  return request({ url: '/organizations/list', method: 'get' })
+export function getOrganizationsList(params = {}) {
+  return request({ url: '/organizations/list', method: 'get', params })
+}
+
+/**
+ * 根据 ID 获取组织机构
+ * @param {number|string} id
+ */
+export function getOrganizationById(id) {
+  return request({ url: `/organizations/${id}`, method: 'get' })
 }
 
 /**

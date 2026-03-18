@@ -1,11 +1,41 @@
-/** 设备类型字典，用于设备台账与巡检模板的设备类型维护 */
-export const DEVICE_TYPE_DICT_CODE = 'DEVICE_TYPE'
+/** 设备类型字典，用于设备台账与巡检模板的设备类型维护，后端 Apifox 期望 device_type */
+export const DEVICE_TYPE_DICT_CODE = 'device_type'
+
+/** 设备运行状态字典，用于设备台账的运行状态枚举 */
+export const DEVICE_STATUS_DICT_CODE = 'DEVICE_STATUS'
+
+/** 模板状态字典，用于巡检模板的状态枚举 */
+export const TEMPLATE_STATUS_DICT_CODE = 'TEMPLATE_STATUS'
+
+/** 模板状态 Mock（字典未配置时兜底），后端通常期望枚举值如 DRAFT/ENABLED */
+export const TEMPLATE_STATUS_OPTIONS = [
+  { value: 'DRAFT', label: '草稿' },
+  { value: 'ENABLED', label: '启用中' },
+]
+
+/** 设备运行状态 Mock（字典未配置时兜底），Apifox 枚举 RUNNING | MAINTENANCE | STOPPED */
+export const DEVICE_STATUS_OPTIONS = [
+  { value: 'RUNNING', label: '运行中' },
+  { value: 'MAINTENANCE', label: '检修中' },
+  { value: 'STOPPED', label: '停用' },
+]
+
+/** 设备类型 Mock（字典未配置时兜底），value 为后端枚举 */
+export const DEVICE_TYPE_OPTIONS = [
+  { value: 'INVERTER', label: '逆变器' },
+  { value: 'COMBINER', label: '汇流箱' },
+  { value: 'TRANSFORMER', label: '箱变' },
+  { value: 'DISTRIBUTION', label: '配电柜' },
+  { value: 'DISTRIBUTION_BOX', label: '配电箱' },
+  { value: 'OTHER', label: '其他设备' },
+]
 
 export const dictionaryRows = [
   { key: '1', category: DEVICE_TYPE_DICT_CODE, code: 'INVERTER', label: '逆变器', status: '启用' },
   { key: '2', category: DEVICE_TYPE_DICT_CODE, code: 'COMBINER', label: '汇流箱', status: '启用' },
   { key: '3', category: DEVICE_TYPE_DICT_CODE, code: 'TRANSFORMER', label: '箱变', status: '启用' },
   { key: '4', category: DEVICE_TYPE_DICT_CODE, code: 'DISTRIBUTION', label: '配电柜', status: '启用' },
+  { key: '6', category: DEVICE_TYPE_DICT_CODE, code: 'DISTRIBUTION_BOX', label: '配电箱', status: '启用' },
   { key: '5', category: DEVICE_TYPE_DICT_CODE, code: 'OTHER', label: '其他设备', status: '启用' },
 ]
 

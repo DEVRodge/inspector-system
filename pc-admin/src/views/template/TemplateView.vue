@@ -3,7 +3,15 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { getDictionaryList } from '../../api/modules/dictionary'
-import { DEVICE_TYPE_DICT_CODE, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
+import { getApiErrorMessage } from '../../utils/error'
+import {
+  createTemplateItem,
+  deleteTemplateItem,
+  getTemplateById,
+  getTemplateItems,
+  updateTemplateItem,
+} from '../../api/modules/inspection'
+import { DEVICE_TYPE_DICT_CODE, DEVICE_TYPE_OPTIONS, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
 import { INSPECTION_ITEM_TYPES } from '../../mock/modules/template'
 import { useTemplateStore } from '../../stores/template'
 import InspectionItemTreeModal from '../../components/template/InspectionItemTreeModal.vue'
@@ -19,16 +27,19 @@ async function loadDeviceTypes() {
   if (isMockEnabled) {
     deviceTypeOptions.value = mockDeviceTypes
       .filter((d) => d.category === DEVICE_TYPE_DICT_CODE && d.status === '启用')
-      .map((d) => ({ value: d.label, label: d.label }))
+      .map((d) => ({ value: d.code ?? d.label, label: d.label }))
   } else {
     try {
       const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
       const arr = Array.isArray(list) ? list : list?.list ?? []
       deviceTypeOptions.value = (arr || [])
         .filter((d) => d.enabled !== false)
-        .map((d) => ({ value: d.name ?? d.value, label: d.name ?? d.value }))
+        .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
+      if (deviceTypeOptions.value.length === 0) {
+        deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
+      }
     } catch {
-      deviceTypeOptions.value = []
+      deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
     }
   }
 }
@@ -54,9 +65,38 @@ async function loadList() {
   }
 }
 
+async function initPage() {
+  await loadDeviceTypes()
+  await loadList()
+  mergeDeviceTypesFromTemplates()
+}
+
+function mergeDeviceTypesFromTemplates() {
+  const fromTemplates = [...new Set(templateStore.list.map((r) => r.deviceType).filter(Boolean))]
+  const existingValues = new Set(deviceTypeOptions.value.map((o) => o.value))
+  for (const dt of fromTemplates) {
+    if (!existingValues.has(dt)) {
+      const label = getDeviceTypeLabel(dt) || dt
+      deviceTypeOptions.value = [...deviceTypeOptions.value, { value: dt, label }]
+      existingValues.add(dt)
+    }
+  }
+  deviceTypeOptions.value = dedupeOptionsByLabel(deviceTypeOptions.value, fromTemplates)
+}
+
+function dedupeOptionsByLabel(opts, templateValues = []) {
+  const byLabel = new Map()
+  const templateSet = new Set(templateValues)
+  for (const o of opts) {
+    const prev = byLabel.get(o.label)
+    const preferThis = !prev || (templateSet.has(o.value) && !templateSet.has(prev.value))
+    if (!prev || preferThis) byLabel.set(o.label, o)
+  }
+  return [...byLabel.values()]
+}
+
 onMounted(() => {
-  loadDeviceTypes()
-  loadList()
+  initPage()
 })
 const rows = computed(() => templateStore.list)
 const filteredRows = computed(() =>
@@ -65,39 +105,111 @@ const filteredRows = computed(() =>
 
 const detailVisible = ref(false)
 const currentRow = ref(null)
+const detailLoading = ref(false)
 const itemModalOpen = ref(false)
 const configTarget = ref(null)
+const itemConfigLoading = ref(false)
+const itemConfigLoadingId = ref(null)
 
 function openCreate() {
   router.push({ name: 'templateNew' })
 }
 
-function openDetail(record) {
-  currentRow.value = record
+async function openDetail(record) {
+  const id = record.id ?? record.key
   detailVisible.value = true
+  currentRow.value = record
+  if (!isMockEnabled) {
+    detailLoading.value = true
+    try {
+      const full = await getTemplateById(id)
+      if (full) currentRow.value = full
+    } catch {
+      message.error('加载模板详情失败')
+    } finally {
+      detailLoading.value = false
+    }
+  }
 }
 
 function openEdit(record) {
   router.push({ name: 'templateEdit', params: { id: record.key } })
 }
 
-function openItemConfig(record) {
-  configTarget.value = record
-  itemModalOpen.value = true
+async function openItemConfig(record) {
+  const id = record.id ?? record.key
+  if (!isMockEnabled) {
+    itemConfigLoading.value = true
+    itemConfigLoadingId.value = id
+    try {
+      const items = await getTemplateItems(id)
+      configTarget.value = { ...record, items: items ?? [] }
+      itemModalOpen.value = true
+    } catch {
+      message.error('加载巡检项失败')
+    } finally {
+      itemConfigLoading.value = false
+      itemConfigLoadingId.value = null
+    }
+  } else {
+    configTarget.value = { ...record, items: record.items ?? [] }
+    itemModalOpen.value = true
+  }
 }
 
 async function onItemsUpdate(newItems) {
   if (!configTarget.value) return
-  const id = configTarget.value.id ?? configTarget.value.key
+  const templateId = configTarget.value.id ?? configTarget.value.key
+  const currentItems = configTarget.value.items ?? []
+  const items = newItems ?? []
+
+  if (isMockEnabled) {
+    try {
+      await templateStore.update(templateId, { ...configTarget.value, items })
+      itemModalOpen.value = false
+      configTarget.value = null
+    } catch {
+      message.error('保存巡检项失败')
+    }
+    return
+  }
+
   try {
-    await templateStore.update(id, {
-      ...configTarget.value,
-      items: newItems ?? [],
-    })
+    const currentIds = new Set(currentItems.map((it) => String(it.id ?? it.key)).filter(Boolean))
+    const newIds = new Set(items.filter((it) => /^\d+$/.test(String(it.id ?? it.key))).map((it) => String(it.id ?? it.key)))
+
+    for (const it of currentItems) {
+      const id = it.id ?? it.key
+      if (!id) continue
+      const sid = String(id)
+      if (!items.some((n) => String(n.id ?? n.key) === sid)) {
+        await deleteTemplateItem(id)
+      }
+    }
+
+    for (const it of items) {
+      const id = it.id ?? it.key
+      const payload = {
+        templateId,
+        name: it.name ?? it.title,
+        type: it.type ?? 'radio',
+        required: !!it.required,
+        rule: it.rule ?? '',
+        defaultValue: it.defaultValue === '正常' ? 'NORMAL' : it.defaultValue === '异常' ? 'ABNORMAL' : (it.defaultValue ?? 'NORMAL'),
+        sort: it.sort ?? 0,
+      }
+      if (id && /^\d+$/.test(String(id))) {
+        await updateTemplateItem(id, payload)
+      } else {
+        await createTemplateItem(payload)
+      }
+    }
+
     itemModalOpen.value = false
     configTarget.value = null
-  } catch {
-    message.error('保存巡检项失败')
+    loadList()
+  } catch (err) {
+    message.error(getApiErrorMessage(err))
   }
 }
 
@@ -105,15 +217,27 @@ function getTypeLabel(type) {
   return INSPECTION_ITEM_TYPES.find((t) => t.value === type)?.label ?? type
 }
 
+function getDeviceTypeLabel(val) {
+  return deviceTypeOptions.value.find((d) => d.value === val)?.label ?? val
+}
+
+const statusLabelMap = { DRAFT: '草稿', ENABLED: '启用中' }
+function getStatusLabel(val) {
+  return statusLabelMap[val] ?? val
+}
+
+function flattenItems(arr) {
+  if (!Array.isArray(arr)) return []
+  return arr.flatMap((it) => {
+    const flat = { key: it.key ?? it.id, name: it.name ?? it.title ?? '未命名', type: it.type ?? 'radio', required: it.required, rule: it.rule }
+    const children = it.children ?? []
+    return [flat, ...flattenItems(children)]
+  })
+}
+
 function getDisplayItems(record) {
   const items = record?.items ?? []
-  return items.map((it) => ({
-    key: it.key,
-    name: it.name ?? it.title ?? '未命名',
-    type: it.type ?? 'radio',
-    required: it.required,
-    rule: it.rule,
-  }))
+  return flattenItems(items).map((it, i) => ({ ...it, key: it.key ?? `i${i}` }))
 }
 
 function removeRow(record) {
@@ -125,8 +249,9 @@ function removeRow(record) {
         const id = record.id ?? record.key
         await templateStore.remove(id)
         message.success('模板已删除')
-      } catch {
-        message.error('删除失败，请稍后重试')
+        loadList()
+      } catch (err) {
+        message.error(getApiErrorMessage(err))
       }
     },
   })
@@ -151,21 +276,33 @@ function removeRow(record) {
           allow-clear
           style="width: 180px"
           :options="deviceTypeOptions"
+          @change="loadList"
         />
       </div>
       <a-table :data-source="filteredRows" :loading="loading" :pagination="false" row-key="key">
         <a-table-column title="模板名称" data-index="name" key="name" />
-        <a-table-column title="设备类型" data-index="deviceType" key="deviceType" width="120" />
+        <a-table-column title="设备类型" data-index="deviceType" key="deviceType" width="120">
+          <template #default="{ record }">{{ getDeviceTypeLabel(record.deviceType) }}</template>
+        </a-table-column>
         <a-table-column title="巡检项数" data-index="itemCount" key="itemCount" width="100" />
         <a-table-column title="必填项数" data-index="requiredCount" key="requiredCount" width="100" />
         <a-table-column title="版本" data-index="version" key="version" width="90" />
-        <a-table-column title="状态" data-index="status" key="status" width="100" />
+        <a-table-column title="状态" data-index="status" key="status" width="100">
+          <template #default="{ record }">{{ getStatusLabel(record.status) }}</template>
+        </a-table-column>
         <a-table-column title="操作" key="action" width="240">
           <template #default="{ record }">
             <a-space :size="4">
               <a-button type="link" size="small" @click="openDetail(record)">查看</a-button>
               <a-button type="link" size="small" @click="openEdit(record)">编辑</a-button>
-              <a-button type="link" size="small" @click="openItemConfig(record)">配置巡检项</a-button>
+              <a-button
+                type="link"
+                size="small"
+                :loading="itemConfigLoading && itemConfigLoadingId === (record.id ?? record.key)"
+                @click="openItemConfig(record)"
+              >
+                配置巡检项
+              </a-button>
               <a-button type="link" danger size="small" @click="removeRow(record)">删除</a-button>
             </a-space>
           </template>
@@ -174,12 +311,13 @@ function removeRow(record) {
     </a-card>
 
     <a-drawer v-model:open="detailVisible" title="模板详情" width="560">
-      <template v-if="currentRow">
+      <a-spin :spinning="detailLoading">
+        <div v-if="currentRow">
         <a-descriptions :column="1" bordered size="small" class="drawer-section">
           <a-descriptions-item label="模板名称">{{ currentRow.name }}</a-descriptions-item>
-          <a-descriptions-item label="设备类型">{{ currentRow.deviceType }}</a-descriptions-item>
+          <a-descriptions-item label="设备类型">{{ getDeviceTypeLabel(currentRow.deviceType) }}</a-descriptions-item>
           <a-descriptions-item label="版本">{{ currentRow.version }}</a-descriptions-item>
-          <a-descriptions-item label="状态">{{ currentRow.status }}</a-descriptions-item>
+          <a-descriptions-item label="状态">{{ getStatusLabel(currentRow.status) }}</a-descriptions-item>
         </a-descriptions>
         <div v-if="currentRow.description" class="drawer-section">
           <div class="drawer-section__title">模板说明</div>
@@ -203,7 +341,8 @@ function removeRow(record) {
             <a-table-column title="判定规则" data-index="rule" key="rule" />
           </a-table>
         </div>
-      </template>
+        </div>
+      </a-spin>
     </a-drawer>
 
     <InspectionItemTreeModal

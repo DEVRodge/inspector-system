@@ -23,28 +23,30 @@
 
 ### 2.1 设备 (Device)
 
-| 前端字段 | 后端字段 | 说明 |
-|----------|----------|------|
+**Apifox DeviceVO / DeviceModifyParam 对齐**：type 为字典 value（枚举），status 为 RUNNING | MAINTENANCE | STOPPED。
+
+| 前端展示/表单 | 后端字段 | 说明 |
+|---------------|----------|------|
 | key | id | 主键，前端 row-key 使用 key |
 | code | code | 设备编码 |
+| typeName / getDeviceTypeLabel(type) | type, typeName | 设备类型，提交枚举值，展示用 typeName |
 | name | name | 设备名称 |
-| type | type | 设备类型 |
 | model | model | 型号 |
 | voltage | voltage | 电压等级 |
 | location | location | 安装地点 |
-| team | team | 责任部门 |
-| date | date | 投运日期 |
-| status | status | 运行状态 |
+| organizationName / team | organizationId, organizationName | 责任部门，提交 organizationId |
+| commissionDate / date | commissionDate | 投运日期 |
+| statusDesc / getDeviceStatusLabel(status) | status, statusDesc | 运行状态，枚举 RUNNING/MAINTENANCE/STOPPED |
 
 **接口**：
 - `GET /device/page` - 分页参数：pageNumber, pageSize, keyword, type, status
 - `GET /device/{id}` - 详情
-- `POST /device` - 新增
+- `POST /device` - 新增（DeviceModifyParam：code, type, name, status 必填；organizationId, commissionDate 可选）
 - `PUT /device/{id}` - 修改
 - `DELETE /device/{id}` - 删除
 - `GET /device/import/template` - 导出导入模板
 - `GET /device/export` - 导出 Excel
-- `POST /device/import` - 导入设备
+- `POST /device/import` - 导入设备，返回 successCount（兼容 count）、errors
 
 ### 2.2 巡检模板 (Template)
 
@@ -52,22 +54,24 @@
 |----------|----------|------|
 | key | id | 主键 |
 | name | name | 模板名称 |
-| deviceType | deviceType | 设备类型 |
+| deviceType | deviceType | 设备类型，枚举值如 INVERTER/COMBINER/TRANSFORMER/DISTRIBUTION/OTHER |
 | description | description | 模板说明 |
 | version | version | 版本 |
-| status | status | 状态 |
-| items | items | 巡检项列表 |
+| status | status | 状态，枚举值如 DRAFT/ENABLED |
+| items | items | 巡检项列表，通过 item 接口单独增删改 |
 
 **接口**：
 - `GET /inspection/template/page` - 分页参数：pageNumber, pageSize, deviceType, keyword
 - `GET /inspection/template/{id}` - 详情（含 items）
 - `POST /inspection/template` - 新增
-- `PUT /inspection/template/{id}` - 修改（若后端支持）
-- `DELETE /inspection/template/{id}` - 删除（若后端支持）
+- `PUT /inspection/template/{id}` - 修改（已对接）
+- `DELETE /inspection/template/{id}` - 删除（已对接）
 - `GET /inspection/template/item/list?templateId=xxx` - 巡检项列表
-- `POST /inspection/template/item` - 新增巡检项
+- `POST /inspection/template/item` - 新增巡检项（响应为 integer，新增 id）
 - `PUT /inspection/template/item/{id}` - 更新巡检项
 - `DELETE /inspection/template/item/{id}` - 删除巡检项
+
+**巡检项 (InspectionTemplateItemParam)**：与 Apifox 对齐，请求体必填 templateId、name、required、defaultValue；可选 parentId、type、rule、sort。**defaultValue 枚举**：`NORMAL` | `ABNORMAL`（非「正常」「异常」）。**无 options 字段**。
 
 ### 2.3 计划任务 (Task)
 
@@ -75,17 +79,15 @@
 |----------|----------|------|
 | key | id | 主键 |
 | plan | plan | 任务名称 |
-| cycle | cycle | 执行周期 |
-| time | time | 执行时间 |
-| cycleExtra | cycleExtra | 周期扩展（weekday, day, month） |
-| executeAt | executeAt | 临时任务执行时间 |
-| team | team | 责任部门 |
-| inspector | inspector | 巡检人 |
-| status | status | 状态 |
-| deviceKeys | deviceIds | 设备 ID 列表 |
+| cycle | cycle | 执行周期，枚举 DAILY/WEEKLY/MONTHLY/QUARTERLY/YEARLY/ONCE |
+| cron | cron | Cron 表达式，前端根据 cycle/time/executeAt 生成 |
+| team | team | 责任班组（组织机构 id，integer） |
+| owner | owner | 负责人（用户 id，integer） |
+| enabled | enabled | 是否启用（boolean） |
+| deviceIds | deviceIds | 设备 ID 列表（integer[]） |
 
 **接口**：
-- `GET /inspection/task/page` - 分页参数：pageNumber, pageSize, cycle, status
+- `GET /inspection/task/page` - 分页参数：pageNumber, pageSize, enabled, keyword
 - `GET /inspection/task/{id}` - 详情
 - `POST /inspection/task` - 新增
 - `PUT /inspection/task/{id}` - 修改

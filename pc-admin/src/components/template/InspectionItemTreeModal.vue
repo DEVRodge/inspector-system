@@ -3,6 +3,9 @@ import { reactive, ref, computed, watch } from 'vue'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 
 const FIXED_OPTIONS = ['正常', '异常']
+/** Apifox: 后端 defaultValue 枚举 NORMAL | ABNORMAL，UI 展示用「正常」「异常」 */
+const DEFAULT_VALUE_ENUM = { 正常: 'NORMAL', 异常: 'ABNORMAL' }
+const DEFAULT_VALUE_LABEL = { NORMAL: '正常', ABNORMAL: '异常' }
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -25,15 +28,19 @@ watch(
 
 function cloneItems(arr) {
   if (!Array.isArray(arr)) return []
-  return arr.map((it) => ({
-    key: it.key || `item_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-    title: it.title ?? it.name ?? '未命名巡检项',
-    required: !!it.required,
-    rule: it.rule ?? '',
-    defaultValue: it.defaultValue ?? '正常',
-    options: it.options ?? ['正常', '异常'],
-    sort: it.sort ?? 0,
-  }))
+  return arr.map((it) => {
+    const rawDefault = it.defaultValue ?? '正常'
+    const displayDefault = DEFAULT_VALUE_LABEL[rawDefault] ?? rawDefault
+    return {
+      key: it.key || it.id || `item_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      id: it.id,
+      title: it.title ?? it.name ?? '未命名巡检项',
+      required: !!it.required,
+      rule: it.rule ?? '',
+      defaultValue: displayDefault,
+      sort: it.sort ?? 0,
+    }
+  })
 }
 
 const selectedKey = ref(null)
@@ -73,7 +80,6 @@ function addItem() {
     required: true,
     rule: '',
     defaultValue: '正常',
-    options: [...FIXED_OPTIONS],
     sort: items.value.length + 1,
   }
   items.value.push(newItem)
@@ -89,7 +95,6 @@ function saveItem() {
   item.required = editingNode.required
   item.rule = editingNode.rule?.trim() ?? ''
   item.defaultValue = editingNode.defaultValue
-  item.options = [...FIXED_OPTIONS]
   item.sort = editingNode.sort ?? 1
 }
 
@@ -112,12 +117,12 @@ function handleCancel() {
 function handleOk() {
   const out = items.value.map((it) => ({
     key: it.key,
+    id: it.id,
     title: it.title,
     name: it.title,
     required: it.required,
     rule: it.rule,
-    defaultValue: it.defaultValue,
-    options: it.options,
+    defaultValue: DEFAULT_VALUE_ENUM[it.defaultValue] ?? it.defaultValue ?? 'NORMAL',
     sort: it.sort,
     type: 'radio',
   }))

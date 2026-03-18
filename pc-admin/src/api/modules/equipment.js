@@ -17,7 +17,12 @@ import { equipmentRows } from '../../mock/equipment'
 function toKey(item) {
   if (!item) return item
   const key = item.id ?? item.key
-  return { ...item, key: String(key) }
+  return {
+    ...item,
+    key: String(key),
+    team: item.organizationName ?? item.team,
+    date: item.commissionDate ?? item.date,
+  }
 }
 
 export function getDepartments() {
@@ -85,24 +90,33 @@ export function getDeviceById(id) {
   return request({ url: `/device/${id}`, method: 'get' }).then((data) => (data ? toKey(data) : null))
 }
 
+/** Apifox DeviceModifyParam: code, type, name, status 必填；organizationId, commissionDate 等可选 */
+function buildDevicePayload(data, forCreate = false) {
+  const raw = {
+    code: data.code,
+    name: data.name,
+    type: data.type,
+    status: forCreate ? (data.status ?? 'RUNNING') : data.status,
+    model: data.model,
+    voltage: data.voltage,
+    location: data.location,
+    organizationId: data.organizationId,
+    commissionDate: data.commissionDate ?? data.date,
+  }
+  return Object.fromEntries(
+    Object.entries(raw).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+  )
+}
+
 export function createDevice(data) {
   if (isMockEnabled) {
     return mockRequest(() => ({ id: `${Date.now()}`, ...data }))
   }
+  const payload = buildDevicePayload(data, true)
   return request({
     url: '/device',
     method: 'post',
-    data: {
-      code: data.code,
-      name: data.name,
-      type: data.type,
-      model: data.model,
-      voltage: data.voltage,
-      location: data.location,
-      team: data.team,
-      date: data.date,
-      status: data.status ?? '运行中',
-    },
+    data: payload,
   })
 }
 
@@ -110,20 +124,11 @@ export function updateDevice(id, data) {
   if (isMockEnabled) {
     return mockRequest(() => ({ id, ...data }))
   }
+  const payload = buildDevicePayload(data, false)
   return request({
     url: `/device/${id}`,
     method: 'put',
-    data: {
-      code: data.code,
-      name: data.name,
-      type: data.type,
-      model: data.model,
-      voltage: data.voltage,
-      location: data.location,
-      team: data.team,
-      date: data.date,
-      status: data.status,
-    },
+    data: payload,
   })
 }
 

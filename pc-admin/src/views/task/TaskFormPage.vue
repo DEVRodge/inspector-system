@@ -3,11 +3,13 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { getDepartments, getDevicePage } from '@/api/modules/equipment'
-import { orgRows } from '@/mock/data'
+import { getOrganizationsList, getOrganizationById } from '@/api/modules/organization'
+import { getUsers } from '@/api/modules/user'
+import { getDevicePage } from '@/api/modules/equipment'
 import { isMockEnabled } from '@/api/http'
 import { useTaskStore } from '@/stores/task'
-import { formToCron, cronToForm } from '@/utils/cron'
+import { buildTaskPayload } from '@/api/modules/inspection'
+import { cronToForm } from '@/utils/cron'
 import {
   TASK_CYCLES,
   WEEKDAYS,
@@ -24,30 +26,31 @@ const isEdit = computed(() => Boolean(route.params.id))
 const formState = reactive({
   key: '',
   plan: '',
-  cycle: 'daily',
+  cycle: 'DAILY',
   time: null,
   cycleExtra: {},
   executeAt: null,
-  team: '',
-  inspector: '',
-  status: '待执行',
+  team: undefined,
+  owner: undefined,
+  enabled: true,
   deviceKeys: [],
 })
 
 function formatPeriodTime(r) {
-  if (r.cycle === 'once') return r.executeAt ?? '-'
-  if (r.cycle === 'weekly' && r.cycleExtra?.weekday != null) {
+  const c = (r.cycle ?? '').toLowerCase()
+  if (c === 'once') return r.executeAt ?? '-'
+  if (c === 'weekly' && r.cycleExtra?.weekday != null) {
     const w = WEEKDAYS.find((d) => d.value === r.cycleExtra.weekday)
     return `${w?.label ?? ''} ${r.time ?? ''}`
   }
-  if (r.cycle === 'monthly' && r.cycleExtra?.day != null) {
+  if (c === 'monthly' && r.cycleExtra?.day != null) {
     return `每月${r.cycleExtra.day}日 ${r.time ?? ''}`
   }
-  if (r.cycle === 'quarterly') return `每季度第 1 天 ${r.time ?? ''}`
-  if (r.cycle === 'yearly' && r.cycleExtra?.month != null && r.cycleExtra?.day != null) {
+  if (c === 'quarterly') return `每季度第 1 天 ${r.time ?? ''}`
+  if (c === 'yearly' && r.cycleExtra?.month != null && r.cycleExtra?.day != null) {
     return `每年${r.cycleExtra.month}月${r.cycleExtra.day}日 ${r.time ?? ''}`
   }
-  if (r.cycle === 'yearly') return `每年 ${r.time ?? ''}`
+  if (c === 'yearly') return `每年 ${r.time ?? ''}`
   return r.time ?? '-'
 }
 
@@ -66,13 +69,13 @@ const devicesOfType = computed(() => {
 
 const selectedRowKeys = computed(() => {
   if (!selectedType.value) return []
-  const typeKeys = new Set(devicesOfType.value.map((e) => e.key))
-  return formState.deviceKeys.filter((k) => typeKeys.has(k))
+  const typeKeys = new Set(devicesOfType.value.map((e) => String(e.key ?? e.id)))
+  return formState.deviceKeys.filter((k) => typeKeys.has(String(k)))
 })
 
 function onDeviceSelectionChange(keys) {
-  const currentTypeKeySet = new Set(devicesOfType.value.map((e) => e.key))
-  const otherKeys = formState.deviceKeys.filter((k) => !currentTypeKeySet.has(k))
+  const currentTypeKeySet = new Set(devicesOfType.value.map((e) => String(e.key ?? e.id)))
+  const otherKeys = formState.deviceKeys.filter((k) => !currentTypeKeySet.has(String(k)))
   formState.deviceKeys = [...otherKeys, ...keys]
 }
 
@@ -82,48 +85,106 @@ const selectedDevices = computed(() => {
   return allDevices.value.filter((e) => keys.includes(String(e.key ?? e.id)))
 })
 
-const departmentOptions = ref([])
-const inspectorOptions = computed(() => {
-  const dept = formState.team
-  const list = dept ? orgRows.filter((r) => r.dept === dept) : orgRows
-  return list.map((r) => ({ value: r.name, label: `${r.name}（${r.dept}）` }))
-})
+const teamOptions = ref([])
+const ownerOptions = ref([])
 
-async function loadDepartments() {
+async function loadOrganizations() {
+  if (isMockEnabled) {
+    teamOptions.value = [
+      { value: '1', label: '运维部' },
+      { value: '2', label: '设备部' },
+      { value: '3', label: '信息部' },
+    ]
+    return
+  }
   try {
-    const res = await getDepartments()
-    const list = res?.list ?? []
-    departmentOptions.value = list.map((item) =>
-      typeof item === 'string' ? { value: item, label: item } : { value: item.name ?? item.id, label: item.name ?? item.id },
-    )
-  } catch {
-    departmentOptions.value = []
+    const data = await getOrganizationsList()
+    const inner = data?.data ?? data
+    const arr = Array.isArray(inner) ? inner : inner?.list ?? Array.isArray(data) ? data : data?.list ?? []
+    const flat = flattenOrgTree(arr)
+    teamOptions.value = (flat || []).map((o) => ({
+      value: String(o.id ?? ''),
+      label: o.name ?? String(o.id ?? ''),
+    }))
+  } catch (e) {
+    teamOptions.value = []
+    message.warning('加载责任部门列表失败，请检查组织接口或稍后重试')
+  }
+}
+
+function flattenOrgTree(nodes, result = []) {
+  for (const n of nodes || []) {
+    result.push({ id: n.id, name: n.name })
+    if (n.children?.length) flattenOrgTree(n.children, result)
+  }
+  return result
+}
+
+async function loadUsers() {
+  if (isMockEnabled) {
+    ownerOptions.value = [
+      { value: '1', label: '张三' },
+      { value: '2', label: '李四' },
+      { value: '3', label: '王五' },
+      { value: '4', label: '王工' },
+    ]
+    return
+  }
+  try {
+    const res = await getUsers({ pageNumber: 1, pageSize: 999 })
+    const inner = res?.data ?? res
+    const arr = inner?.records ?? inner?.list ?? res?.records ?? res?.list ?? []
+    ownerOptions.value = (arr || []).map((u) => ({
+      value: String(u.id ?? ''),
+      label: u.name ?? u.username ?? String(u.id ?? ''),
+    }))
+  } catch (e) {
+    ownerOptions.value = []
+    message.warning('加载负责人列表失败，请检查用户接口或稍后重试')
   }
 }
 
 watch(
   () => formState.cycle,
   (cycle) => {
-    formState.time = cycle === 'once' ? null : '08:00'
-    formState.executeAt = cycle === 'once' ? dayjs().format('YYYY-MM-DD HH:mm') : null
+    const c = (cycle ?? '').toLowerCase()
+    formState.time = c === 'once' ? null : '08:00'
+    formState.executeAt = c === 'once' ? dayjs().format('YYYY-MM-DD HH:mm') : null
     formState.cycleExtra = {}
-    if (cycle === 'weekly') formState.cycleExtra = { weekday: 1 }
-    if (cycle === 'monthly') formState.cycleExtra = { day: 1 }
-    if (cycle === 'yearly') formState.cycleExtra = { month: 1, day: 1 }
+    if (c === 'weekly') formState.cycleExtra = { weekday: 1 }
+    if (c === 'monthly') formState.cycleExtra = { day: 1 }
+    if (c === 'yearly') formState.cycleExtra = { month: 1, day: 1 }
+  },
+)
+
+watch(
+  () => formState.team,
+  () => {
+    formState.owner = undefined
+    loadUsers()
   },
 )
 
 function fillForm(record) {
   if (record) {
-    let cycle = record.cycle ?? 'daily'
+    let cycle = record.cycle ?? 'DAILY'
     let time = record.time ?? '08:00'
     let cycleExtra = record.cycleExtra ?? {}
-    if (record.cron && record.cycle !== 'once') {
+    let executeAt = record.executeAt ? dayjs(record.executeAt) : null
+    const c = (record.cycle ?? '').toLowerCase()
+    if (record.cron && c !== 'once') {
       const parsed = cronToForm(record.cron)
       if (parsed) {
-        cycle = parsed.cycle
+        cycle = (parsed.cycle ?? '').toUpperCase()
         time = parsed.time
         cycleExtra = parsed.cycleExtra ?? {}
+      }
+    } else if (record.cron && c === 'once') {
+      const parsed = cronToForm(record.cron)
+      if (parsed?.executeAt) {
+        cycle = 'ONCE'
+        time = null
+        executeAt = dayjs(parsed.executeAt)
       }
     }
     Object.assign(formState, {
@@ -132,23 +193,23 @@ function fillForm(record) {
       cycle,
       time,
       cycleExtra,
-      executeAt: record.executeAt ? dayjs(record.executeAt) : null,
-      team: record.team ?? '',
-      inspector: record.inspector ?? record.owner ?? '',
-      status: record.status ?? '待执行',
-      deviceKeys: [...(record.deviceKeys ?? record.deviceIds ?? [])],
+      executeAt,
+      team: record.team != null ? String(record.team) : undefined,
+      owner: record.owner != null ? String(record.owner) : undefined,
+      enabled: record.enabled !== false,
+      deviceKeys: [...(record.deviceIds ?? record.deviceKeys ?? [])],
     })
   } else {
     Object.assign(formState, {
       key: '',
       plan: '',
-      cycle: 'daily',
+      cycle: 'DAILY',
       time: '08:00',
       cycleExtra: {},
       executeAt: null,
-      team: '',
-      inspector: '',
-      status: '待执行',
+      team: undefined,
+      owner: undefined,
+      enabled: true,
       deviceKeys: [],
     })
   }
@@ -167,14 +228,35 @@ async function loadDevices() {
   }
 }
 
+async function ensureTeamOptionIncluded(teamId) {
+  if (!teamId || isMockEnabled) return
+  const sid = String(teamId)
+  const exists = teamOptions.value.some((o) => String(o.value) === sid)
+  if (exists) return
+  try {
+    const org = await getOrganizationById(teamId)
+    const data = org?.data ?? org
+    const name = data?.name ?? sid
+    teamOptions.value = [...teamOptions.value, { value: sid, label: name }]
+  } catch {
+    teamOptions.value = [...teamOptions.value, { value: sid, label: `部门 ${teamId}` }]
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadDepartments(), loadDevices()])
+  await Promise.all([loadOrganizations(), loadDevices()])
   if (isEdit.value && route.params.id) {
     const record = await taskStore.getById(route.params.id)
-    if (record) fillForm(record)
-    else message.warning('任务不存在')
+    if (record) {
+      fillForm(record)
+      await ensureTeamOptionIncluded(formState.team)
+      await loadUsers()
+    } else {
+      message.warning('任务不存在')
+    }
   } else {
     fillForm(null)
+    await loadUsers()
   }
 })
 
@@ -182,7 +264,7 @@ function goBack() {
   router.push('/tasks')
 }
 
-function submit() {
+async function submit() {
   if (!formState.plan?.trim()) {
     message.warning('请填写任务名称')
     return
@@ -191,20 +273,13 @@ function submit() {
     message.warning('请至少选择一台设备')
     return
   }
-  if (!formState.team) {
-    message.warning('请选择责任部门')
-    return
-  }
-  if (!formState.inspector) {
-    message.warning('请选择巡检人')
-    return
-  }
-  if (formState.cycle !== 'once') {
+  const c = (formState.cycle ?? '').toLowerCase()
+  if (c !== 'once') {
     if (!formState.time) {
       message.warning('请设置执行时间')
       return
     }
-    if (formState.cycle === 'yearly') {
+    if (c === 'yearly') {
       if (formState.cycleExtra?.month == null || formState.cycleExtra?.day == null) {
         message.warning('请选择年度任务的月份和日')
         return
@@ -217,25 +292,20 @@ function submit() {
     }
   }
 
-  const cron = formState.cycle === 'once' ? null : formToCron(formState)
-  const deviceKeys = [...formState.deviceKeys]
-  const payload = {
-    plan: formState.plan,
-    cycle: formState.cycle,
-    time: formState.time,
-    cycleExtra: { ...formState.cycleExtra },
+  const deviceIds = selectedDevices.value.map((d) => Number(d.id ?? d.key)).filter((n) => !Number.isNaN(n))
+  const formData = {
+    ...formState,
     executeAt: formState.executeAt ? dayjs(formState.executeAt).format('YYYY-MM-DD HH:mm') : null,
-    cron,
-    team: formState.team,
-    inspector: formState.inspector,
-    status: formState.status,
-    deviceKeys,
-    devices: deviceKeys.length,
-    cycleLabel: TASK_CYCLES.find((c) => c.value === formState.cycle)?.label ?? formState.cycle,
-    timeDisplay: formState.cycle === 'once'
+    deviceIds,
+  }
+  const payload = buildTaskPayload(formData)
+  Object.assign(payload, {
+    devices: deviceIds.length,
+    cycleLabel: TASK_CYCLES.find((c2) => String(c2.value).toLowerCase() === c)?.label ?? formState.cycle,
+    timeDisplay: c === 'once'
       ? dayjs(formState.executeAt).format('YYYY-MM-DD HH:mm')
       : formatPeriodTime(formState),
-  }
+  })
 
   try {
     if (isEdit.value && route.params.id) {
@@ -322,7 +392,7 @@ function submit() {
           </a-select>
         </a-form-item>
 
-        <template v-if="formState.cycle === 'once'">
+        <template v-if="(formState.cycle || '').toLowerCase() === 'once'">
           <a-form-item label="执行时间（年月日时分）" required>
             <a-date-picker
               v-model:value="formState.executeAt"
@@ -335,14 +405,14 @@ function submit() {
           </a-form-item>
         </template>
         <template v-else>
-          <a-form-item v-if="formState.cycle === 'weekly'" label="星期">
+          <a-form-item v-if="(formState.cycle || '').toLowerCase() === 'weekly'" label="星期">
             <a-select v-model:value="formState.cycleExtra.weekday" style="width: 100%">
               <a-select-option v-for="w in WEEKDAYS" :key="w.value" :value="w.value">
                 {{ w.label }}
               </a-select-option>
             </a-select>
           </a-form-item>
-          <a-form-item v-if="formState.cycle === 'monthly'" label="每月几日">
+          <a-form-item v-if="(formState.cycle || '').toLowerCase() === 'monthly'" label="每月几日">
             <a-input-number
               v-model:value="formState.cycleExtra.day"
               :min="1"
@@ -350,7 +420,7 @@ function submit() {
               style="width: 100%"
             />
           </a-form-item>
-          <template v-if="formState.cycle === 'yearly'">
+          <template v-if="(formState.cycle || '').toLowerCase() === 'yearly'">
             <a-form-item label="月份" required>
               <a-select v-model:value="formState.cycleExtra.month" placeholder="选择月份" style="width: 100%">
                 <a-select-option v-for="m in 12" :key="m" :value="m">{{ m }} 月</a-select-option>
@@ -365,7 +435,7 @@ function submit() {
               />
             </a-form-item>
           </template>
-          <a-form-item v-if="formState.cycle === 'quarterly'" label="说明">
+          <a-form-item v-if="(formState.cycle || '').toLowerCase() === 'quarterly'" label="说明">
             <span class="form-hint">每季度第 1 天执行，请设置执行时间（时分）。</span>
           </a-form-item>
           <a-form-item label="执行时间（时分）" required>
@@ -379,21 +449,26 @@ function submit() {
           </a-form-item>
         </template>
 
-        <a-form-item label="责任部门" required>
+        <a-form-item label="责任部门">
           <a-select
             v-model:value="formState.team"
-            placeholder="请选择责任部门"
-            :options="departmentOptions"
+            placeholder="请选择责任部门（组织机构）"
+            :options="teamOptions"
+            allow-clear
             style="width: 100%"
           />
         </a-form-item>
-        <a-form-item label="巡检人" required>
+        <a-form-item label="负责人">
           <a-select
-            v-model:value="formState.inspector"
-            placeholder="请选择巡检人"
-            :options="inspectorOptions"
+            v-model:value="formState.owner"
+            placeholder="请选择负责人（用户）"
+            :options="ownerOptions"
+            allow-clear
             style="width: 100%"
           />
+        </a-form-item>
+        <a-form-item label="是否启用">
+          <a-switch v-model:checked="formState.enabled" checked-children="启用" un-checked-children="禁用" />
         </a-form-item>
 
         <a-form-item>

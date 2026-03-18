@@ -3,7 +3,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { getDictionaryList } from '../../api/modules/dictionary'
-import { DEVICE_TYPE_DICT_CODE, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
+import { getApiErrorMessage } from '../../utils/error'
+import { DEVICE_TYPE_DICT_CODE, DEVICE_TYPE_OPTIONS, TEMPLATE_STATUS_DICT_CODE, TEMPLATE_STATUS_OPTIONS, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
 import { useTemplateStore } from '../../stores/template'
 import { isMockEnabled } from '../../api/http'
 
@@ -13,22 +14,45 @@ const templateStore = useTemplateStore()
 
 const isEdit = computed(() => Boolean(route.params.id))
 const deviceTypeOptions = ref([])
+const templateStatusOptions = ref([])
 
 async function loadDeviceTypes() {
   if (isMockEnabled) {
     deviceTypeOptions.value = mockDeviceTypes
       .filter((d) => d.category === DEVICE_TYPE_DICT_CODE && d.status === '启用')
-      .map((d) => ({ value: d.label, label: d.label }))
+      .map((d) => ({ value: d.code ?? d.label, label: d.label }))
   } else {
     try {
       const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
       const arr = Array.isArray(list) ? list : list?.list ?? []
       deviceTypeOptions.value = (arr || [])
         .filter((d) => d.enabled !== false)
-        .map((d) => ({ value: d.name ?? d.value, label: d.name ?? d.value }))
+        .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
+      if (deviceTypeOptions.value.length === 0) {
+        deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
+      }
     } catch {
-      deviceTypeOptions.value = []
+      deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
     }
+  }
+}
+
+async function loadTemplateStatuses() {
+  if (isMockEnabled) {
+    templateStatusOptions.value = TEMPLATE_STATUS_OPTIONS
+    return
+  }
+  try {
+    const list = await getDictionaryList(TEMPLATE_STATUS_DICT_CODE)
+    const arr = Array.isArray(list) ? list : list?.list ?? []
+    templateStatusOptions.value = (arr || [])
+      .filter((d) => d.enabled !== false)
+      .map((d) => ({ value: d.value ?? d.name, label: d.name ?? d.value }))
+    if (templateStatusOptions.value.length === 0) {
+      templateStatusOptions.value = TEMPLATE_STATUS_OPTIONS
+    }
+  } catch {
+    templateStatusOptions.value = TEMPLATE_STATUS_OPTIONS
   }
 }
 
@@ -37,7 +61,7 @@ const formState = reactive({
   deviceType: '',
   description: '',
   version: 'V1.0',
-  status: '草稿',
+  status: 'DRAFT',
 })
 
 function fillForm(record) {
@@ -47,7 +71,7 @@ function fillForm(record) {
       deviceType: record.deviceType,
       description: record.description ?? '',
       version: record.version ?? 'V1.0',
-      status: record.status ?? '草稿',
+      status: record.status ?? 'DRAFT',
     })
   } else {
     Object.assign(formState, {
@@ -55,13 +79,13 @@ function fillForm(record) {
       deviceType: '',
       description: '',
       version: 'V1.0',
-      status: '草稿',
+      status: 'DRAFT',
     })
   }
 }
 
 onMounted(async () => {
-  await loadDeviceTypes()
+  await Promise.all([loadDeviceTypes(), loadTemplateStatuses()])
   if (isEdit.value && route.params.id) {
     const record = await templateStore.getById(route.params.id)
     if (record) fillForm(record)
@@ -90,7 +114,7 @@ async function submit() {
     deviceType: formState.deviceType,
     description: formState.description?.trim() ?? '',
     version: formState.version ?? 'V1.0',
-    status: formState.status ?? '草稿',
+    status: formState.status ?? 'DRAFT',
   }
 
   try {
@@ -124,8 +148,8 @@ async function submit() {
       message.success('模板已新增')
     }
     router.push('/templates')
-  } catch {
-    message.error('保存失败，请稍后重试')
+  } catch (err) {
+    message.error(getApiErrorMessage(err))
   }
 }
 </script>
@@ -164,10 +188,7 @@ async function submit() {
           <a-input v-model:value="formState.version" placeholder="如：V1.0" />
         </a-form-item>
         <a-form-item label="状态">
-          <a-select v-model:value="formState.status" style="width: 100%">
-            <a-select-option value="启用中">启用中</a-select-option>
-            <a-select-option value="草稿">草稿</a-select-option>
-          </a-select>
+          <a-select v-model:value="formState.status" placeholder="请选择状态" style="width: 100%" :options="templateStatusOptions" />
         </a-form-item>
       </a-form>
 

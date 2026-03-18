@@ -4,6 +4,7 @@
  */
 import { isMockEnabled, mockRequest, request } from '../http'
 import { getFilePreviewUrl } from '@/utils/file'
+import { formToCron } from '@/utils/cron'
 import { templateRows } from '../../mock/modules/template'
 import { taskRows } from '../../mock/modules/task'
 import { recordRows } from '../../mock/data'
@@ -59,27 +60,26 @@ export function getTemplateById(id) {
 }
 
 export function deleteTemplate(id) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ success: true }))
-  }
-  return request({ url: `/inspection/template/${id}`, method: 'delete' })
+  return request({ url: `/inspection-template/${id}`, method: 'delete' })
 }
 
 export function updateTemplate(id, data) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ id, ...data }))
-  }
   return request({
-    url: `/inspection/template/${id}`,
+    url: `/inspection-template/${id}`,
     method: 'put',
-    data: {
-      name: data.name,
-      deviceType: data.deviceType,
-      description: data.description,
-      version: data.version,
-      status: data.status,
-    },
+    data: buildTemplatePayload(data),
   })
+}
+
+function buildTemplatePayload(data) {
+  const raw = {
+    name: data.name?.trim?.(),
+    deviceType: data.deviceType,
+    description: data.description?.trim?.() || undefined,
+    version: data.version?.trim?.() || undefined,
+    status: data.status,
+  }
+  return Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined && v !== null && v !== ''))
 }
 
 export function createTemplate(data) {
@@ -89,13 +89,7 @@ export function createTemplate(data) {
   return request({
     url: '/inspection/template',
     method: 'post',
-    data: {
-      name: data.name,
-      deviceType: data.deviceType,
-      description: data.description,
-      version: data.version,
-      status: data.status,
-    },
+    data: buildTemplatePayload(data),
   })
 }
 
@@ -116,14 +110,30 @@ export function getTemplateItems(templateId) {
   })
 }
 
+/** Apifox: defaultValue 枚举 NORMAL | ABNORMAL，前端展示用「正常」「异常」 */
+function toDefaultValueEnum(val) {
+  if (val === '正常') return 'NORMAL'
+  if (val === '异常') return 'ABNORMAL'
+  return val ?? 'NORMAL'
+}
+
 export function createTemplateItem(data) {
   if (isMockEnabled) {
     return mockRequest(() => ({ id: `i${Date.now()}`, ...data }))
   }
+  const payload = {
+    templateId: data.templateId,
+    name: data.name ?? data.title,
+    type: data.type ?? 'radio',
+    required: !!data.required,
+    rule: data.rule ?? '',
+    defaultValue: toDefaultValueEnum(data.defaultValue),
+    sort: data.sort ?? 0,
+  }
   return request({
     url: '/inspection/template/item',
     method: 'post',
-    data,
+    data: payload,
   })
 }
 
@@ -131,10 +141,18 @@ export function updateTemplateItem(id, data) {
   if (isMockEnabled) {
     return mockRequest(() => ({ id, ...data }))
   }
+  const payload = {
+    name: data.name ?? data.title,
+    type: data.type ?? 'radio',
+    required: !!data.required,
+    rule: data.rule ?? '',
+    defaultValue: toDefaultValueEnum(data.defaultValue),
+    sort: data.sort ?? 0,
+  }
   return request({
     url: `/inspection/template/item/${id}`,
     method: 'put',
-    data,
+    data: payload,
   })
 }
 
@@ -150,13 +168,46 @@ export function deleteTemplateItem(id) {
 
 // ---------- 计划任务 ----------
 
+const CYCLE_MAP = { daily: 'DAILY', weekly: 'WEEKLY', monthly: 'MONTHLY', quarterly: 'QUARTERLY', yearly: 'YEARLY', once: 'ONCE' }
+
+function toCycleEnum(cycle) {
+  const c = cycle ? String(cycle).toLowerCase() : ''
+  return CYCLE_MAP[c] ?? cycle
+}
+
+export function buildTaskPayload(data) {
+  const cycle = toCycleEnum(data.cycle)
+  const cron =
+    data.cron ??
+    formToCron({
+      cycle: data.cycle,
+      time: data.time,
+      cycleExtra: data.cycleExtra ?? {},
+      executeAt: data.executeAt,
+    })
+  const deviceIds = (data.deviceIds ?? data.deviceKeys ?? []).map((id) => Number(id)).filter((n) => !Number.isNaN(n))
+  const raw = {
+    plan: data.plan?.trim?.(),
+    cycle,
+    cron: cron || undefined,
+    team: data.team != null && data.team !== '' ? Number(data.team) : undefined,
+    owner: data.owner != null && data.owner !== '' ? Number(data.owner) : undefined,
+    enabled: data.enabled !== false,
+    deviceIds,
+  }
+  return Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined && v !== null))
+}
+
 export function getTaskPage(params = {}) {
   if (isMockEnabled) {
     return mockRequest(() => {
       let list = [...taskRows]
-      const { cycle, status, pageNumber = 1, pageSize = 20 } = params
-      if (cycle) list = list.filter((r) => r.cycle === cycle)
-      if (status) list = list.filter((r) => r.status === status)
+      const { enabled, keyword, pageNumber = 1, pageSize = 20 } = params
+      if (enabled !== undefined && enabled !== null) list = list.filter((r) => r.enabled === enabled)
+      if (keyword) {
+        const kw = String(keyword).toLowerCase()
+        list = list.filter((r) => r.plan?.toLowerCase().includes(kw))
+      }
       const total = list.length
       const start = (pageNumber - 1) * pageSize
       list = list.slice(start, start + pageSize)
@@ -169,8 +220,8 @@ export function getTaskPage(params = {}) {
     params: {
       pageNumber: params.pageNumber ?? 1,
       pageSize: params.pageSize ?? 20,
-      cycle: params.cycle,
-      status: params.status,
+      enabled: params.enabled,
+      keyword: params.keyword || undefined,
     },
   }).then((data) => {
     const raw = data?.records ?? data?.list ?? []
@@ -193,40 +244,16 @@ export function createTask(data) {
   if (isMockEnabled) {
     return mockRequest(() => ({ id: `${Date.now()}`, key: `${Date.now()}`, ...data }))
   }
-  return request({
-    url: '/inspection/task',
-    method: 'post',
-    data: {
-      plan: data.plan,
-      cycle: data.cycle,
-      time: data.time,
-      cycleExtra: data.cycleExtra,
-      executeAt: data.executeAt,
-      team: data.team,
-      inspector: data.inspector,
-      deviceIds: data.deviceIds ?? data.deviceKeys,
-    },
-  })
+  const payload = buildTaskPayload(data)
+  return request({ url: '/inspection/task', method: 'post', data: payload })
 }
 
 export function updateTask(id, data) {
   if (isMockEnabled) {
     return mockRequest(() => ({ id, ...data }))
   }
-  return request({
-    url: `/inspection/task/${id}`,
-    method: 'put',
-    data: {
-      plan: data.plan,
-      cycle: data.cycle,
-      time: data.time,
-      cycleExtra: data.cycleExtra,
-      executeAt: data.executeAt,
-      team: data.team,
-      inspector: data.inspector,
-      deviceIds: data.deviceIds ?? data.deviceKeys,
-    },
-  })
+  const payload = buildTaskPayload(data)
+  return request({ url: `/inspection/task/${id}`, method: 'put', data: payload })
 }
 
 export function deleteTask(id) {

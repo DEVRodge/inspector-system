@@ -2,10 +2,14 @@ import { request } from '../http'
 
 /**
  * 分页查询角色
- * @param {{ pageNumber: number, pageSize: number, keyword?: string, name?: string, enabled?: boolean }} params
+ * @param {{ pageNumber?: number, pageSize?: number, keyword?: string, name?: string, enabled?: boolean }} params
  */
-export function getRoles(params) {
-  return request({ url: '/roles', method: 'get', params })
+export function getRoles(params = {}) {
+  const clean = {}
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') clean[k] = v
+  }
+  return request({ url: '/roles', method: 'get', params: clean })
 }
 
 /**

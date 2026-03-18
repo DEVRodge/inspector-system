@@ -13,7 +13,8 @@ import {
   updateDevice,
 } from '../../api/modules/equipment'
 import { getDictionaryList } from '../../api/modules/dictionary'
-import { DEVICE_TYPE_DICT_CODE, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
+import { getApiErrorMessage } from '../../utils/error'
+import { DEVICE_STATUS_DICT_CODE, DEVICE_STATUS_OPTIONS, DEVICE_TYPE_DICT_CODE, DEVICE_TYPE_OPTIONS, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
 import { equipmentRows } from '../../mock/data'
 import { isMockEnabled } from '../../api/http'
 
@@ -45,7 +46,7 @@ const formState = reactive({
   location: '',
   team: '',
   date: '',
-  status: '运行中',
+  status: '',
 })
 
 const filteredRows = computed(() => {
@@ -97,7 +98,7 @@ function onTableChange(pag) {
 }
 
 function fillForm(record) {
-  Object.assign(formState, record || {
+  const empty = {
     key: '',
     code: '',
     name: '',
@@ -107,33 +108,91 @@ function fillForm(record) {
     location: '',
     team: '',
     date: '',
-    status: '运行中',
+    status: '',
+  }
+  if (!record) {
+    Object.assign(formState, empty)
+    return
+  }
+  let typeVal = record.type ?? record.typeName ?? ''
+  if (typeVal && deviceTypeOptions.value.length > 0) {
+    const byValue = deviceTypeOptions.value.find((d) => d.value === typeVal)
+    const byLabel = deviceTypeOptions.value.find((d) => d.label === typeVal)
+    typeVal = byValue ? byValue.value : byLabel ? byLabel.value : typeVal
+  }
+  let statusVal = record.status ?? record.statusDesc ?? ''
+  if (statusVal && deviceStatusOptions.value.length > 0) {
+    const byValue = deviceStatusOptions.value.find((d) => d.value === statusVal)
+    const byLabel = deviceStatusOptions.value.find((d) => d.label === statusVal)
+    statusVal = byValue ? byValue.value : byLabel ? byLabel.value : statusVal
+  }
+  Object.assign(formState, {
+    ...empty,
+    ...record,
+    type: typeVal,
+    team: record.organizationId ?? record.team,
+    date: record.commissionDate ?? record.date,
+    status: statusVal,
   })
 }
 
 const teamOptions = ref([])
 const deviceTypeOptions = ref([])
+const deviceStatusOptions = ref([])
 
 async function loadDeviceTypes() {
   if (isMockEnabled) {
     deviceTypeOptions.value = mockDeviceTypes
       .filter((d) => d.category === DEVICE_TYPE_DICT_CODE && d.status === '启用')
-      .map((d) => ({ value: d.label, label: d.label }))
+      .map((d) => ({ value: d.code ?? d.label, label: d.label }))
   } else {
     try {
       const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
       const arr = Array.isArray(list) ? list : list?.list ?? []
       deviceTypeOptions.value = (arr || [])
         .filter((d) => d.enabled !== false)
-        .map((d) => ({ value: d.name ?? d.value, label: d.name ?? d.value }))
+        .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
+      if (deviceTypeOptions.value.length === 0) {
+        deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
+      }
     } catch {
-      deviceTypeOptions.value = []
+      deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
     }
   }
 }
 
+async function loadDeviceStatuses() {
+  if (isMockEnabled) {
+    deviceStatusOptions.value = DEVICE_STATUS_OPTIONS
+    return
+  }
+  try {
+    const list = await getDictionaryList(DEVICE_STATUS_DICT_CODE)
+    const arr = Array.isArray(list) ? list : list?.list ?? []
+    deviceStatusOptions.value = (arr || [])
+      .filter((d) => d.enabled !== false)
+      .map((d) => ({ value: d.value ?? d.name, label: d.name ?? d.value }))
+    if (deviceStatusOptions.value.length === 0) {
+      deviceStatusOptions.value = DEVICE_STATUS_OPTIONS
+    }
+  } catch {
+    deviceStatusOptions.value = DEVICE_STATUS_OPTIONS
+  }
+}
+
+function getDeviceTypeLabel(val) {
+  if (!val) return ''
+  return deviceTypeOptions.value.find((d) => d.value === val)?.label ?? val
+}
+
+function getDeviceStatusLabel(val) {
+  if (!val) return ''
+  return deviceStatusOptions.value.find((d) => d.value === val)?.label ?? val
+}
+
 onMounted(() => {
   loadDeviceTypes()
+  loadDeviceStatuses()
   loadList()
 })
 
@@ -141,7 +200,10 @@ async function openCreate() {
   currentRow.value = null
   fillForm()
   formVisible.value = true
-  await Promise.all([loadDepartments(), loadDeviceTypes()])
+  await Promise.all([loadDepartments(), loadDeviceTypes(), loadDeviceStatuses()])
+  if (!formState.status && deviceStatusOptions.value.length > 0) {
+    formState.status = deviceStatusOptions.value[0].value
+  }
 }
 
 async function loadDepartments() {
@@ -149,7 +211,9 @@ async function loadDepartments() {
     const res = await getDepartments()
     const list = res?.list ?? []
     teamOptions.value = list.map((item) =>
-      typeof item === 'string' ? { value: item, label: item } : { value: item.name ?? item.id, label: item.name ?? item.id },
+      typeof item === 'string'
+        ? { value: item, label: item }
+        : { value: item.id ?? item.name, label: item.name ?? item.id },
     )
   } catch {
     teamOptions.value = []
@@ -163,27 +227,37 @@ function openDetail(record) {
 
 async function openEdit(record) {
   currentRow.value = record
-  fillForm(record)
   formVisible.value = true
-  await Promise.all([loadDepartments(), loadDeviceTypes()])
+  await Promise.all([loadDepartments(), loadDeviceTypes(), loadDeviceStatuses()])
+  fillForm(record)
 }
 
 async function saveRow() {
-  if (!formState.code || !formState.name || !formState.type) {
+  const code = formState.code?.trim?.() ?? ''
+  const name = formState.name?.trim?.() ?? ''
+  const typeVal = formState.type != null && formState.type !== '' ? String(formState.type) : ''
+  if (!code || !name || !typeVal) {
     message.warning('请先填写设备编码、设备类型和设备名称')
     return
   }
+  const statusVal = formState.status != null && formState.status !== '' ? formState.status : ''
+  if (!statusVal) {
+    message.warning('请选择运行状态')
+    return
+  }
 
+  const teamVal = formState.team
+  const isOrgId = typeof teamVal === 'number' || (typeof teamVal === 'string' && /^\d+$/.test(teamVal))
   const payload = {
-    code: formState.code,
-    name: formState.name,
-    type: formState.type,
-    model: formState.model,
-    voltage: formState.voltage,
-    location: formState.location,
-    team: formState.team,
-    date: formState.date,
-    status: formState.status,
+    code,
+    name,
+    type: typeVal,
+    model: formState.model?.trim?.() || undefined,
+    voltage: formState.voltage?.trim?.() || undefined,
+    location: formState.location?.trim?.() || undefined,
+    ...(isOrgId ? { organizationId: Number(teamVal) } : {}),
+    date: formState.date || undefined,
+    status: statusVal,
   }
 
   if (currentRow.value) {
@@ -197,8 +271,8 @@ async function saveRow() {
         await updateDevice(id, payload)
         message.success('设备信息已更新')
         loadList()
-      } catch {
-        message.error('更新失败，请稍后重试')
+      } catch (err) {
+        message.error(getApiErrorMessage(err))
         return
       }
     }
@@ -212,8 +286,8 @@ async function saveRow() {
         message.success('设备已新增')
         formVisible.value = false
         loadList()
-      } catch {
-        message.error('新增失败，请稍后重试')
+      } catch (err) {
+        message.error(getApiErrorMessage(err))
         return
       }
     }
@@ -422,8 +496,9 @@ async function handleImportFile(e) {
   try {
     const res = await importEquipment(file)
     const data = res?.data ?? res
-    if (data?.success && data?.count > 0) {
-      message.success(`成功导入 ${data.count} 条设备`)
+    const successCount = data?.successCount ?? data?.count ?? 0
+    if (data?.success && successCount > 0) {
+      message.success(`成功导入 ${successCount} 条设备`)
       if (!isMockEnabled) loadList()
     } else if (data?.errors?.length) {
       Modal.warning({
@@ -468,11 +543,7 @@ async function handleImportFile(e) {
         <div class="table-toolbar__left" style="flex: 1">
           <a-input v-model:value="query.keyword" placeholder="搜索设备编码/名称" allow-clear />
           <a-select v-model:value="query.type" placeholder="设备类型" allow-clear style="width: 180px" :options="deviceTypeOptions" />
-          <a-select v-model:value="query.status" placeholder="运行状态" allow-clear style="width: 180px">
-            <a-select-option value="运行中">运行中</a-select-option>
-            <a-select-option value="检修中">检修中</a-select-option>
-            <a-select-option value="停用">停用</a-select-option>
-          </a-select>
+          <a-select v-model:value="query.status" placeholder="运行状态" allow-clear style="width: 180px" :options="deviceStatusOptions" />
           <a-button v-if="!isMockEnabled" type="primary" @click="() => { pagination.current = 1; loadList() }">查询</a-button>
         </div>
       </div>
@@ -485,14 +556,22 @@ async function handleImportFile(e) {
         @change="onTableChange"
       >
         <a-table-column title="设备编码" data-index="code" key="code" width="130" />
-        <a-table-column title="设备类型" data-index="type" key="type" width="110" />
+        <a-table-column title="设备类型" key="type" width="110">
+          <template #default="{ record }">{{ record.typeName ?? getDeviceTypeLabel(record.type) }}</template>
+        </a-table-column>
         <a-table-column title="设备名称" data-index="name" key="name" />
         <a-table-column title="型号" data-index="model" key="model" width="120" />
         <a-table-column title="电压等级" data-index="voltage" key="voltage" width="110" />
         <a-table-column title="安装地点" data-index="location" key="location" />
-        <a-table-column title="责任部门" data-index="team" key="team" width="110" />
-        <a-table-column title="投运日期" data-index="date" key="date" width="120" />
-        <a-table-column title="运行状态" data-index="status" key="status" width="110" />
+        <a-table-column title="责任部门" key="team" width="110">
+          <template #default="{ record }">{{ record.organizationName ?? record.team }}</template>
+        </a-table-column>
+        <a-table-column title="投运日期" key="date" width="120">
+          <template #default="{ record }">{{ record.commissionDate ?? record.date }}</template>
+        </a-table-column>
+        <a-table-column title="运行状态" key="status" width="110">
+          <template #default="{ record }">{{ record.statusDesc ?? getDeviceStatusLabel(record.status) }}</template>
+        </a-table-column>
         <a-table-column title="操作" key="action" width="240" fixed="right">
           <template #default="{ record }">
             <a-space :size="4">
@@ -509,14 +588,14 @@ async function handleImportFile(e) {
     <a-drawer v-model:open="detailVisible" title="设备详情" width="420">
       <a-descriptions v-if="currentRow" :column="1" bordered size="small">
         <a-descriptions-item label="设备编码">{{ currentRow.code }}</a-descriptions-item>
-        <a-descriptions-item label="设备类型">{{ currentRow.type }}</a-descriptions-item>
+        <a-descriptions-item label="设备类型">{{ currentRow.typeName ?? getDeviceTypeLabel(currentRow.type) }}</a-descriptions-item>
         <a-descriptions-item label="设备名称">{{ currentRow.name }}</a-descriptions-item>
         <a-descriptions-item label="型号">{{ currentRow.model }}</a-descriptions-item>
         <a-descriptions-item label="电压等级">{{ currentRow.voltage }}</a-descriptions-item>
         <a-descriptions-item label="安装地点">{{ currentRow.location }}</a-descriptions-item>
-        <a-descriptions-item label="责任部门">{{ currentRow.team }}</a-descriptions-item>
-        <a-descriptions-item label="投运日期">{{ currentRow.date }}</a-descriptions-item>
-        <a-descriptions-item label="运行状态">{{ currentRow.status }}</a-descriptions-item>
+        <a-descriptions-item label="责任部门">{{ currentRow.organizationName ?? currentRow.team }}</a-descriptions-item>
+        <a-descriptions-item label="投运日期">{{ currentRow.commissionDate ?? currentRow.date }}</a-descriptions-item>
+        <a-descriptions-item label="运行状态">{{ currentRow.statusDesc ?? getDeviceStatusLabel(currentRow.status) }}</a-descriptions-item>
       </a-descriptions>
     </a-drawer>
 
@@ -562,7 +641,9 @@ async function handleImportFile(e) {
       @ok="saveRow"
     >
       <a-form layout="vertical">
-        <a-form-item label="设备编码"><a-input v-model:value="formState.code" /></a-form-item>
+        <a-form-item label="设备编码" required>
+          <a-input v-model:value="formState.code" placeholder="请输入唯一设备编码" />
+        </a-form-item>
         <a-form-item label="设备类型">
           <a-select v-model:value="formState.type" placeholder="请选择设备类型" :options="deviceTypeOptions" />
         </a-form-item>
@@ -581,12 +662,8 @@ async function handleImportFile(e) {
             style="width: 100%"
           />
         </a-form-item>
-        <a-form-item label="运行状态">
-          <a-select v-model:value="formState.status">
-            <a-select-option value="运行中">运行中</a-select-option>
-            <a-select-option value="检修中">检修中</a-select-option>
-            <a-select-option value="停用">停用</a-select-option>
-          </a-select>
+        <a-form-item label="运行状态" required>
+          <a-select v-model:value="formState.status" placeholder="请选择运行状态" :options="deviceStatusOptions" />
         </a-form-item>
       </a-form>
     </a-modal>

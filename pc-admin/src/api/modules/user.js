@@ -2,10 +2,14 @@ import { request } from '../http'
 
 /**
  * 分页查询用户
- * @param {{ pageNumber: number, pageSize: number, keyword?: string, organizationId?: number, positionId?: number, roleId?: string, enabled?: boolean }} params
+ * @param {{ pageNumber?: number, pageSize?: number, keyword?: string, organizationId?: number, positionId?: number, roleId?: string, enabled?: boolean }} params
  */
-export function getUsers(params) {
-  return request({ url: '/users', method: 'get', params })
+export function getUsers(params = {}) {
+  const clean = {}
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') clean[k] = v
+  }
+  return request({ url: '/users', method: 'get', params: clean })
 }
 
 /**
@@ -39,4 +43,13 @@ export function updateUser(id, data) {
  */
 export function deleteUser(id) {
   return request({ url: `/user/${id}`, method: 'delete' })
+}
+
+/**
+ * 重置用户密码
+ * @param {number|string} id
+ * @param {{ newPassword: string }} data
+ */
+export function resetUserPassword(id, data) {
+  return request({ url: `/user/${id}/reset-password`, method: 'put', data })
 }
