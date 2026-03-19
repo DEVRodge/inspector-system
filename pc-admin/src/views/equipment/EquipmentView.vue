@@ -255,7 +255,7 @@ async function saveRow() {
     model: formState.model?.trim?.() || undefined,
     voltage: formState.voltage?.trim?.() || undefined,
     location: formState.location?.trim?.() || undefined,
-    ...(isOrgId ? { organizationId: Number(teamVal) } : {}),
+    ...(isOrgId ? { organizationId: String(teamVal) } : {}),
     date: formState.date || undefined,
     status: statusVal,
   }

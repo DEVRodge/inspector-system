@@ -20,8 +20,15 @@ function normalizeTaskRecord(raw) {
   const r = raw?.data ?? raw
   const deviceIds = r.deviceIds ?? (() => {
     const list = r.deviceIdList ?? r.deviceList ?? []
+    // 设备 ID 可能为雪花号（> 2^53），避免 Number 精度损失，统一转字符串透传
     return Array.isArray(list)
-      ? list.map((x) => (typeof x === 'object' && x != null ? Number(x.id ?? x.deviceId ?? x.key) : Number(x))).filter((n) => !Number.isNaN(n))
+      ? list
+          .map((x) => {
+            if (typeof x === 'object' && x != null) return x.id ?? x.deviceId ?? x.key
+            return x
+          })
+          .map((v) => (v != null ? String(v) : ''))
+          .filter(Boolean)
       : []
   })()
   return {
@@ -204,13 +211,14 @@ export function buildTaskPayload(data) {
       cycleExtra: data.cycleExtra ?? {},
       executeAt: data.executeAt,
     })
-  const deviceIds = (data.deviceIds ?? data.deviceKeys ?? []).map((id) => Number(id)).filter((n) => !Number.isNaN(n))
+  // 雪花号避免 Number 精度损失：统一转字符串透传（后端按 long/int64 解析）
+  const deviceIds = (data.deviceIds ?? data.deviceKeys ?? []).map((id) => (id != null ? String(id) : '')).filter(Boolean)
   const raw = {
     plan: data.plan?.trim?.(),
     cycle,
     cron: cron || undefined,
-    team: data.team != null && data.team !== '' ? Number(data.team) : undefined,
-    owner: data.owner != null && data.owner !== '' ? Number(data.owner) : undefined,
+    team: data.team != null && data.team !== '' ? String(data.team) : undefined,
+    owner: data.owner != null && data.owner !== '' ? String(data.owner) : undefined,
     enabled: data.enabled !== false,
     deviceIds,
   }

@@ -96,24 +96,27 @@ async function ensureNameMapsForRows(rows = []) {
 
 function formatPeriodTime(record) {
   let rec = record
-  if (!record.time && record.cron) {
+  const cycle = (record.cycle ?? '').toLowerCase()
+  const shouldParseFromCron =
+    !!record.cron && ((cycle === 'once' && !record.executeAt) || !record.time)
+  if (shouldParseFromCron) {
     const parsed = cronToForm(record.cron)
     if (parsed) rec = { ...record, ...parsed }
   }
-  const cycle = (rec.cycle ?? '').toLowerCase()
-  if (cycle === 'once') return rec.executeAt ?? '-'
-  if (cycle === 'weekly' && rec.cycleExtra?.weekday != null) {
+  const recCycle = (rec.cycle ?? '').toLowerCase()
+  if (recCycle === 'once') return rec.executeAt ?? '-'
+  if (recCycle === 'weekly' && rec.cycleExtra?.weekday != null) {
     const weekday = WEEKDAYS.find((item) => item.value === rec.cycleExtra.weekday)
     return `${weekday?.label ?? ''} ${rec.time ?? ''}`.trim()
   }
-  if (cycle === 'monthly' && rec.cycleExtra?.day != null) {
+  if (recCycle === 'monthly' && rec.cycleExtra?.day != null) {
     return `每月${rec.cycleExtra.day}日 ${rec.time ?? ''}`.trim()
   }
-  if (cycle === 'quarterly') return `每季度第 1 天 ${rec.time ?? ''}`.trim()
-  if (cycle === 'yearly' && rec.cycleExtra?.month != null && rec.cycleExtra?.day != null) {
+  if (recCycle === 'quarterly') return `每季度第 1 天 ${rec.time ?? ''}`.trim()
+  if (recCycle === 'yearly' && rec.cycleExtra?.month != null && rec.cycleExtra?.day != null) {
     return `每年${rec.cycleExtra.month}月${rec.cycleExtra.day}日 ${rec.time ?? ''}`.trim()
   }
-  if (cycle === 'yearly') return `每年 ${rec.time ?? ''}`.trim()
+  if (recCycle === 'yearly') return `每年 ${rec.time ?? ''}`.trim()
   return rec.time ?? '-'
 }
 
@@ -124,7 +127,7 @@ const rows = computed(() =>
       ...record,
       devices: (record.deviceIds ?? record.deviceKeys)?.length ?? 0,
       cycleLabel: record.cycleLabel ?? TASK_CYCLES.find((item) => String(item.value).toLowerCase() === cycle)?.label ?? record.cycle,
-      timeDisplay: cycle === 'once' ? record.executeAt : formatPeriodTime(record),
+      timeDisplay: formatPeriodTime(record),
       teamName: record.teamName ?? (record.team != null ? teamNameMap.value[String(record.team)] : undefined),
       ownerName: record.ownerName ?? (record.owner != null ? ownerNameMap.value[String(record.owner)] : undefined),
     }
@@ -191,7 +194,7 @@ async function openDetail(record) {
       ...full,
       devices: (full.deviceIds ?? full.deviceKeys)?.length ?? 0,
       cycleLabel: full.cycleLabel ?? TASK_CYCLES.find((item) => String(item.value).toLowerCase() === cycle)?.label ?? full.cycle,
-      timeDisplay: cycle === 'once' ? full.executeAt : formatPeriodTime(full),
+      timeDisplay: formatPeriodTime(full),
       teamName: full.teamName ?? (full.team != null ? teamNameMap.value[String(full.team)] : undefined),
       ownerName: full.ownerName ?? (full.owner != null ? ownerNameMap.value[String(full.owner)] : undefined),
     }

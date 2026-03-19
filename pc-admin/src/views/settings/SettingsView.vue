@@ -43,6 +43,7 @@ import {
 } from '../../api/modules/role'
 import { getMenusTree } from '../../api/modules/menu'
 import { getBizLogPage } from '../../api/modules/biz-log'
+import { getApiErrorMessage } from '../../utils/error'
 
 const DEVICE_TYPE_DICT_CODE = 'device_type'
 
@@ -311,7 +312,7 @@ async function loadPostOptionsFromApi(selectedIds = []) {
     const data = await getPositions({ pageNumber: 1, pageSize: 1000 })
     const baseRows = data?.records ?? (Array.isArray(data) ? data : [])
     let rows = [...baseRows]
-    const normalizedSelectedIds = normalizeIdList(selectedIds).map(Number).filter(Boolean)
+    const normalizedSelectedIds = normalizeIdList(selectedIds)
     if (normalizedSelectedIds.length) {
       const selectedRows = await getPositionsByIds(normalizedSelectedIds)
       rows = dedupeById([...rows, ...(Array.isArray(selectedRows) ? selectedRows : [])])
@@ -567,10 +568,11 @@ async function saveMember() {
       gender: memberForm.gender || 'NONE',
       remark: memberForm.remark || '',
       enabled: toEnabled(memberForm.status),
-      organizationIds: (memberForm.organizationIds || []).map(Number).filter(Boolean),
-      positionIds: (memberForm.positionIds || []).map(Number).filter(Boolean),
-      roleIds: (memberForm.roleIds || []).map(Number).filter(Boolean),
-      photographIdList: (memberForm.photographIdList || []).map(Number).filter(Boolean),
+      // long/int64(雪花号) 超出 JS Number 安全范围，必须字符串透传
+      organizationIds: normalizeIdList(memberForm.organizationIds),
+      positionIds: normalizeIdList(memberForm.positionIds),
+      roleIds: normalizeIdList(memberForm.roleIds),
+      photographIdList: normalizeIdList(memberForm.photographIdList),
     }
     if (memberForm.password) payload.password = memberForm.password
     if (currentMember.value) {
@@ -586,7 +588,7 @@ async function saveMember() {
     }
     memberVisible.value = false
   } catch (e) {
-    message.error('保存失败：' + (e?.message || '未知错误'))
+    message.error('保存失败：' + getApiErrorMessage(e))
     throw e
   }
 }
@@ -873,7 +875,7 @@ function fillDept(record) {
     Object.assign(deptForm, {
       key: record.key,
       name: record.name,
-      parentId: record.parentId != null && Number(record.parentId) !== 0 ? String(record.parentId) : undefined,
+      parentId: record.parentId != null && String(record.parentId) !== '0' ? String(record.parentId) : undefined,
       remark: record.remark ?? '',
       sort: record.sort ?? 0,
       status: record.status ?? '启用',
@@ -921,7 +923,7 @@ async function saveDept() {
   }
   try {
     const payload = {
-      parentId: deptForm.parentId ? Number(deptForm.parentId) : 0,
+      parentId: deptForm.parentId ? String(deptForm.parentId) : 0,
       name: deptForm.name,
       sort: deptForm.sort ?? 0,
       enabled: toEnabled(deptForm.status),

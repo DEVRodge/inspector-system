@@ -94,7 +94,8 @@ export function readBatch(ids) {
   return request({
     url: '/msg-record/read-batch',
     method: 'put',
-    data: ids.map((id) => Number(id)),
+    // 消息记录主键可能为 long/int64，避免 Number 精度损失
+    data: ids.map((id) => String(id)).filter(Boolean),
   })
 }
 

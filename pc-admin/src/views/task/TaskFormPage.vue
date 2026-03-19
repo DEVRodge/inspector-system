@@ -157,7 +157,8 @@ function normalizeUserList(res) {
 
 async function loadUsers(organizationId = formState.team, options = {}) {
   const { includeUserId } = options
-  const orgId = organizationId != null && organizationId !== '' ? Number(organizationId) : undefined
+  // 雪花号可能超过 JS Number 精度；这里必须保持字符串透传给后端
+  const orgId = organizationId != null && organizationId !== '' ? String(organizationId) : undefined
   if (!orgId && !includeUserId) {
     ownerOptions.value = []
     return
@@ -400,7 +401,8 @@ async function submit() {
     }
   }
 
-  const deviceIds = formState.deviceKeys.map((id) => Number(id)).filter((n) => !Number.isNaN(n))
+  // 同样避免雪花号 Number 精度损失：提交时保持字符串
+  const deviceIds = (formState.deviceKeys ?? []).map((id) => String(id)).filter(Boolean)
   const formData = {
     ...formState,
     executeAt: formState.executeAt ? dayjs(formState.executeAt).format('YYYY-MM-DD HH:mm') : null,
