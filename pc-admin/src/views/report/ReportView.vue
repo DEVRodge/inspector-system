@@ -19,30 +19,60 @@ const periods = [
 ]
 
 const report = ref({
-  stats: [],
-  trend: {
-    labels: [],
-    completionRate: [],
-    exceptionCount: [],
+  period: 'month',
+  periodTitle: '',
+  statisticsRangeDescription: '',
+  statisticsRangeStart: '',
+  statisticsRangeEndExclusive: '',
+  overview: {
+    inspectionCompletionRatePercent: 0,
+    inspectionCompletionRateCompareNote: '',
+    newExceptionCount: 0,
+    newExceptionCountDeltaVsPreviousPeriod: 0,
+    newExceptionCountCompareNote: '',
   },
-  personWorkload: [],
-  exceptionDistribution: [],
-  riskDevices: [],
+  trendSeries: [],
+  staffWorkload: [],
+  exceptionStatusDistribution: [],
+  highRiskDevices: [],
 })
 
 const riskDeviceColumns = [
-  { title: '设备编码', dataIndex: 'device', key: 'device' },
-  { title: '巡检次数', dataIndex: 'inspections', key: 'inspections', width: 100 },
-  { title: '异常次数', dataIndex: 'exceptions', key: 'exceptions', width: 100 },
-  { title: '完成率', dataIndex: 'completionRate', key: 'completionRate', width: 110 },
-  { title: '最近问题', dataIndex: 'latestIssue', key: 'latestIssue' },
+  { title: '设备', dataIndex: 'deviceCodeOrName', key: 'deviceCodeOrName' },
+  { title: '巡检次数', dataIndex: 'inspectionOccurrenceCount', key: 'inspectionOccurrenceCount', width: 120 },
+  { title: '异常次数', dataIndex: 'exceptionOccurrenceCount', key: 'exceptionOccurrenceCount', width: 120 },
+  { title: '完成率', dataIndex: 'slotCompletionRatePercent', key: 'slotCompletionRatePercent', width: 110 },
+  { title: '最近问题', dataIndex: 'latestExceptionIssueSummary', key: 'latestExceptionIssueSummary' },
 ]
+
+function formatPercent(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '0%'
+  return `${n.toFixed(1)}%`
+}
+
+const statCards = computed(() => [
+  {
+    key: 'inspectionCompletionRatePercent',
+    title: '巡检完成率',
+    value: Number(report.value.overview.inspectionCompletionRatePercent ?? 0).toFixed(1),
+    suffix: '%',
+    compareNote: report.value.overview.inspectionCompletionRateCompareNote || '-',
+  },
+  {
+    key: 'newExceptionCount',
+    title: '新建异常数量',
+    value: report.value.overview.newExceptionCount ?? 0,
+    suffix: '条',
+    compareNote: report.value.overview.newExceptionCountCompareNote || '-',
+  },
+])
 
 const trendChartOption = computed(() => ({
   tooltip: { trigger: 'axis' },
   legend: { top: 0 },
   grid: { left: 48, right: 24, top: 48, bottom: 32 },
-  xAxis: { type: 'category', data: report.value.trend.labels },
+  xAxis: { type: 'category', data: report.value.trendSeries.map((item) => item.axisLabel) },
   yAxis: [
     { type: 'value', name: '百分比', min: 0, max: 100 },
     { type: 'value', name: '异常数' },
@@ -52,7 +82,7 @@ const trendChartOption = computed(() => ({
       name: '巡检完成率',
       type: 'line',
       smooth: true,
-      data: report.value.trend.completionRate,
+      data: report.value.trendSeries.map((item) => item.inspectionCompletionRatePercent),
       itemStyle: { color: '#1677ff' },
       areaStyle: { color: 'rgba(22, 119, 255, 0.12)' },
     },
@@ -61,7 +91,7 @@ const trendChartOption = computed(() => ({
       type: 'bar',
       yAxisIndex: 1,
       barMaxWidth: 36,
-      data: report.value.trend.exceptionCount,
+      data: report.value.trendSeries.map((item) => item.newExceptionCount),
       itemStyle: { color: '#faad14' },
     },
   ],
@@ -73,13 +103,13 @@ const personWorkloadChartOption = computed(() => ({
   xAxis: { type: 'value' },
   yAxis: {
     type: 'category',
-    data: report.value.personWorkload.map((item) => item.name),
+    data: report.value.staffWorkload.map((item) => item.operatorDisplayName),
   },
   series: [
     {
       name: '任务量',
       type: 'bar',
-      data: report.value.personWorkload.map((item) => item.tasks),
+      data: report.value.staffWorkload.map((item) => item.assignedTaskCount),
       itemStyle: { color: '#1677ff', borderRadius: [0, 8, 8, 0] },
       label: { show: true, position: 'right' },
     },
@@ -94,10 +124,10 @@ const exceptionDistributionOption = computed(() => ({
       type: 'pie',
       radius: ['48%', '74%'],
       label: { formatter: '{b}\n{c}条' },
-      data: report.value.exceptionDistribution.map((item) => ({
-        value: item.value,
-        name: item.name,
-        itemStyle: { color: item.color },
+      data: report.value.exceptionStatusDistribution.map((item) => ({
+        value: item.count,
+        name: item.statusDisplayName,
+        itemStyle: { color: item.chartColorHex || undefined },
       })),
     },
   ],
@@ -216,58 +246,48 @@ onMounted(() => {
     <a-spin :spinning="loading">
       <div ref="reportContentRef" class="report-content">
         <div class="report-stats-grid page-section">
-          <a-card v-for="item in report.stats" :key="item.key" :bordered="false" class="metric-card">
+          <a-card v-for="item in statCards" :key="item.key" :bordered="false" class="metric-card">
             <a-statistic :title="item.title" :value="item.value" :suffix="item.suffix" />
-            <div class="metric-card__footer">较上期 {{ item.diff }}</div>
-            <div v-if="item.formula" class="metric-card__formula">{{ item.formula }}</div>
+            <div class="metric-card__footer">{{ item.compareNote }}</div>
           </a-card>
         </div>
 
         <div class="report-charts-grid page-section">
           <a-card title="完成率与异常数量趋势" :bordered="false">
             <BaseChart :option="trendChartOption" height="280px" />
-            <div class="formula-note">
-              计算公式：巡检完成率 = 已完成任务数 / 应执行任务数；异常数量 = 统计周期内产生的异常记录数。
-            </div>
           </a-card>
           <a-card title="异常状态统计" :bordered="false">
             <BaseChart :option="exceptionDistributionOption" height="280px" />
-            <div class="formula-note">
-              按异常状态类型统计数量：待处理、处理中、已处理。各状态数量之和 = 异常总数。
-            </div>
           </a-card>
           <a-card title="人员工作量对比" :bordered="false">
             <BaseChart :option="personWorkloadChartOption" height="280px" />
-            <div class="formula-note">
-              以人为统计维度：任务量 = 该人员在统计周期内被分配的任务数；可结合设备数、异常数、完成率对比个人工作量。
-            </div>
           </a-card>
           <a-card title="统计摘要" :bordered="false">
             <div class="detail-list">
-              <div v-for="item in report.personWorkload" :key="item.key" class="detail-list__item">
-                <strong>{{ item.name }}</strong>
-                <div>任务量 {{ item.tasks }} 项，覆盖设备 {{ item.devices }} 台。</div>
+              <div v-for="item in report.staffWorkload" :key="item.key" class="detail-list__item">
+                <strong>{{ item.operatorDisplayName }}</strong>
+                <div>任务量 {{ item.assignedTaskCount }} 项，覆盖设备 {{ item.coveredDeviceSlotCount }} 台。</div>
                 <div class="subtle-text">
-                  异常 {{ item.exceptions }} 条，完成率 {{ item.completionRate }}%
+                  异常 {{ item.relatedExceptionCount }} 条，完成率 {{ formatPercent(item.taskCompletionRatePercent) }}
                 </div>
               </div>
-            </div>
-            <div class="formula-note">
-              统计摘要以人为维度：每人展示任务量、覆盖设备数、异常条数、完成率。
             </div>
           </a-card>
         </div>
 
         <a-card title="高风险设备趋势" :bordered="false" class="page-section">
           <a-table
-            :data-source="report.riskDevices"
+            :data-source="report.highRiskDevices"
             :columns="riskDeviceColumns"
             :pagination="false"
             row-key="key"
-          />
-          <div class="formula-note">
-            高风险设备：按设备维度的巡检次数、异常次数、完成率及最近问题汇总，用于识别需重点关注的设备。
-          </div>
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.dataIndex === 'slotCompletionRatePercent'">
+                {{ formatPercent(record.slotCompletionRatePercent) }}
+              </template>
+            </template>
+          </a-table>
         </a-card>
       </div>
     </a-spin>
@@ -292,16 +312,6 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-}
-
-.formula-note {
-  margin-top: 10px;
-  padding: 6px 10px;
-  font-size: 11px;
-  color: #8c8c8c;
-  background: #fafafa;
-  border-radius: 4px;
-  line-height: 1.5;
 }
 
 .metric-card__footer {

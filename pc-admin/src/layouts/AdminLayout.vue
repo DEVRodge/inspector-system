@@ -14,19 +14,18 @@ import {
   MenuUnfoldOutlined,
   BellOutlined,
 } from '@ant-design/icons-vue'
-import { menuItems as staticMenuItems } from '../constants/menu'
-import { menuBadges } from '../mock/data'
 import { useAuthStore } from '../stores/auth'
-import { getMenusCurrentTree } from '../api/modules/menu'
-import { isMockEnabled } from '../api/http'
+import { useAppMenuStore } from '../stores/appMenu'
 import { getMessageList, getUnreadTotal, readAll, readBatch } from '../api/modules/message'
 import { useWebSocket } from '../composables/useWebSocket'
+import { collectMenuPathsFromTree } from '../utils/menuPaths'
 
 import brandLogo from '../assets/logo.png'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const appMenuStore = useAppMenuStore()
 const collapsed = ref(false)
 
 const noticePopoverOpen = ref(false)
@@ -74,18 +73,44 @@ function mapApiMenuToItems(nodes) {
     })
 }
 
-const menuItemsFromApi = ref(null)
-
 const selectedKeys = computed(() => [route.path])
 
+/** 已登录且菜单尚未就绪（含 idle 首帧）：不展示全量静态兜底 */
+const menuSidebarPending = computed(() => {
+  if (!authStore.isLoggedIn) return false
+  const tree = appMenuStore.rawTree
+  const emptyTree = !tree || tree.length === 0
+  if (appMenuStore.status === 'loading' && emptyTree) return true
+  if (appMenuStore.status === 'idle' && emptyTree) return true
+  return false
+})
+
 const menuNodes = computed(() => {
-  const items = menuItemsFromApi.value
-  if (items && items.length > 0) return items
-  return staticMenuItems.map((item) => ({
-    key: item.key,
-    icon: () => h(iconMap[item.icon]),
-    label: item.title,
-  }))
+  if (!authStore.isLoggedIn) return []
+  const mapped = mapApiMenuToItems(appMenuStore.rawTree)
+  if (mapped && mapped.length > 0) return mapped
+  if (menuSidebarPending.value) return []
+  return [
+    {
+      key: '/dashboard',
+      icon: () => h(DashboardOutlined),
+      label: '工作台',
+    },
+  ]
+})
+
+const showMenuLoadError = computed(
+  () =>
+    authStore.isLoggedIn &&
+    appMenuStore.status === 'error' &&
+    (!menuNodes.value || menuNodes.value.length <= 1),
+)
+
+/** 与侧栏菜单树一致：仅当接口返回树中含 /settings 时显示头部入口 */
+const showSettingsInHeader = computed(() => {
+  if (!authStore.isLoggedIn) return false
+  if (appMenuStore.status !== 'ready' || !appMenuStore.rawTree?.length) return false
+  return collectMenuPathsFromTree(appMenuStore.rawTree).has('/settings')
 })
 
 useWebSocket(() => {
@@ -93,15 +118,15 @@ useWebSocket(() => {
 })
 
 onMounted(async () => {
-  if (!isMockEnabled && authStore.isLoggedIn) {
-    try {
-      const data = await getMenusCurrentTree()
-      const tree = Array.isArray(data) ? data : data?.children ?? data?.list ?? []
-      const mapped = mapApiMenuToItems(tree)
-      menuItemsFromApi.value = mapped && mapped.length > 0 ? mapped : null
-    } catch {
-      menuItemsFromApi.value = null
-    }
+  if (authStore.isLoggedIn) {
+    await Promise.all([
+      authStore.hydrateUserProfile().catch(() => {
+        /* 展示沿用本地缓存或占位 */
+      }),
+      appMenuStore.fetchMenus().catch(() => {
+        /* 错误态由 store 与侧边栏提示承担 */
+      }),
+    ])
   }
 
   await Promise.all([refreshUnreadTotal(), loadNotices()])
@@ -205,7 +230,24 @@ function logout() {
           光伏厂区设备巡检数字化系统
         </span>
       </div>
-      <a-menu :items="menuNodes" :selected-keys="selectedKeys" mode="inline" @click="jump" />
+      <a-spin :spinning="menuSidebarPending" tip="加载菜单中…">
+        <div style="min-height: 120px">
+          <a-alert
+            v-if="showMenuLoadError"
+            type="warning"
+            show-icon
+            :message="appMenuStore.lastError || '菜单加载失败'"
+            style="margin: 12px 12px 0"
+          />
+          <a-menu
+            v-if="menuNodes.length"
+            :items="menuNodes"
+            :selected-keys="selectedKeys"
+            mode="inline"
+            @click="jump"
+          />
+        </div>
+      </a-spin>
     </a-layout-sider>
 
     <a-layout>
@@ -331,13 +373,15 @@ function logout() {
             <a-space style="cursor: pointer">
               <a-avatar style="background: #1677ff">管</a-avatar>
               <div style="line-height: 1.2">
-                <div style="font-weight: 600">{{ authStore.user.name }}</div>
-                <div style="font-size: 12px; color: #86909c">{{ authStore.user.role }}</div>
+                <div style="font-weight: 600">{{ authStore.user.name || '用户' }}</div>
+                <div style="font-size: 12px; color: #86909c">{{ authStore.user.role || '—' }}</div>
               </div>
             </a-space>
             <template #overlay>
               <a-menu>
-                <a-menu-item @click="router.push('/settings')">系统设置</a-menu-item>
+                <a-menu-item v-if="showSettingsInHeader" @click="router.push('/settings')">
+                  系统设置
+                </a-menu-item>
                 <a-menu-item danger @click="logout">退出登录</a-menu-item>
               </a-menu>
             </template>

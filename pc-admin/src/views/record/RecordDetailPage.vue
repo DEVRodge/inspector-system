@@ -2,9 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { recordRows, equipmentRows } from '../../mock/data'
 import { getRecordById } from '../../api/modules/inspection'
-import { isMockEnabled } from '../../api/http'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,8 +10,12 @@ const record = ref(null)
 const loading = ref(false)
 
 function getDeviceType(deviceCode) {
-  const eq = equipmentRows.find((e) => e.code === deviceCode)
-  return eq?.type ?? '-'
+  const r = record.value
+  if (r?.deviceResults?.length) {
+    const dr = r.deviceResults.find((d) => (d.deviceCode ?? d.device) === deviceCode)
+    if (dr?.deviceType) return dr.deviceType
+  }
+  return '-'
 }
 
 const deviceResults = computed(() => {
@@ -46,18 +48,14 @@ function collapseAll() {
 
 onMounted(async () => {
   const id = route.params.id
-  if (isMockEnabled) {
-    record.value = recordRows.find((r) => String(r.key) === String(id)) ?? null
-  } else {
-    loading.value = true
-    try {
-      record.value = await getRecordById(id)
-    } catch {
-      message.error('加载记录失败')
-      record.value = null
-    } finally {
-      loading.value = false
-    }
+  loading.value = true
+  try {
+    record.value = await getRecordById(id)
+  } catch {
+    message.error('加载记录失败')
+    record.value = null
+  } finally {
+    loading.value = false
   }
   if (!record.value) {
     message.warning('记录不存在')

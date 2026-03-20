@@ -2,11 +2,9 @@
  * 巡检业务接口：模板、任务、记录
  * 对接后端 /inspection/*
  */
-import { isMockEnabled, mockRequest, request } from '../http'
+import { request } from '../http'
 import { getFilePreviewUrl } from '@/utils/file'
 import { formToCron } from '@/utils/cron'
-import { templateRows } from '../../mock/modules/template'
-import { recordRows } from '../../mock/data'
 
 function toKey(item) {
   if (!item) return item
@@ -20,7 +18,6 @@ function normalizeTaskRecord(raw) {
   const r = raw?.data ?? raw
   const deviceIds = r.deviceIds ?? (() => {
     const list = r.deviceIdList ?? r.deviceList ?? []
-    // 设备 ID 可能为雪花号（> 2^53），避免 Number 精度损失，统一转字符串透传
     return Array.isArray(list)
       ? list
           .map((x) => {
@@ -44,21 +41,6 @@ function normalizeTaskRecord(raw) {
 // ---------- 巡检模板 ----------
 
 export function getTemplatePage(params = {}) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      let list = templateRows.map((r) => ({ ...r, itemCount: r.items?.length ?? 0, requiredCount: r.items?.filter((i) => i.required)?.length ?? 0 }))
-      const { deviceType, keyword, pageNumber = 1, pageSize = 20 } = params
-      if (deviceType) list = list.filter((r) => r.deviceType === deviceType)
-      if (keyword) {
-        const kw = String(keyword).toLowerCase()
-        list = list.filter((r) => (r.name && r.name.toLowerCase().includes(kw)))
-      }
-      const total = list.length
-      const start = (pageNumber - 1) * pageSize
-      list = list.slice(start, start + pageSize)
-      return { list: list.map(toKey), total }
-    })
-  }
   return request({
     url: '/inspection/template/page',
     method: 'get',
@@ -76,12 +58,6 @@ export function getTemplatePage(params = {}) {
 }
 
 export function getTemplateById(id) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      const r = templateRows.find((t) => String(t.key) === String(id))
-      return r ? toKey({ ...r, items: r.items ?? [] }) : null
-    })
-  }
   return request({ url: `/inspection/template/${id}`, method: 'get' }).then((data) => (data ? toKey(data) : null))
 }
 
@@ -109,9 +85,6 @@ function buildTemplatePayload(data) {
 }
 
 export function createTemplate(data) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ id: `${Date.now()}`, key: `${Date.now()}`, ...data }))
-  }
   return request({
     url: '/inspection/template',
     method: 'post',
@@ -120,12 +93,6 @@ export function createTemplate(data) {
 }
 
 export function getTemplateItems(templateId) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      const t = templateRows.find((r) => String(r.key) === String(templateId))
-      return (t?.items ?? []).map((it, i) => toKey({ ...it, key: it.key ?? `i${i}` }))
-    })
-  }
   return request({
     url: '/inspection/template/item/list',
     method: 'get',
@@ -144,9 +111,6 @@ function toDefaultValueEnum(val) {
 }
 
 export function createTemplateItem(data) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ id: `i${Date.now()}`, ...data }))
-  }
   const payload = {
     templateId: data.templateId,
     name: data.name ?? data.title,
@@ -164,9 +128,6 @@ export function createTemplateItem(data) {
 }
 
 export function updateTemplateItem(id, data) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ id, ...data }))
-  }
   const payload = {
     name: data.name ?? data.title,
     type: data.type ?? 'radio',
@@ -183,9 +144,6 @@ export function updateTemplateItem(id, data) {
 }
 
 export function deleteTemplateItem(id) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ success: true }))
-  }
   return request({
     url: `/inspection/template/item/${id}`,
     method: 'delete',
@@ -211,7 +169,6 @@ export function buildTaskPayload(data) {
       cycleExtra: data.cycleExtra ?? {},
       executeAt: data.executeAt,
     })
-  // 雪花号避免 Number 精度损失：统一转字符串透传（后端按 long/int64 解析）
   const deviceIds = (data.deviceIds ?? data.deviceKeys ?? []).map((id) => (id != null ? String(id) : '')).filter(Boolean)
   const raw = {
     plan: data.plan?.trim?.(),
@@ -249,21 +206,21 @@ export function getTaskPage(params = {}) {
 
 export function getTaskById(id) {
   return request({ url: `/inspection/task/${id}`, method: 'get' }).then((data) =>
-    data ? toKey(normalizeTaskRecord(data)) : null
+    data ? toKey(normalizeTaskRecord(data)) : null,
   )
 }
 
 export function createTask(data) {
   const payload = buildTaskPayload(data)
   return request({ url: '/inspection/task', method: 'post', data: payload }).then((data) =>
-    data ? toKey(normalizeTaskRecord(data)) : null
+    data ? toKey(normalizeTaskRecord(data)) : null,
   )
 }
 
 export function updateTask(id, data) {
   const payload = buildTaskPayload(data)
   return request({ url: `/inspection/task/${id}`, method: 'put', data: payload }).then((data) =>
-    data ? toKey(normalizeTaskRecord(data)) : null
+    data ? toKey(normalizeTaskRecord(data)) : null,
   )
 }
 
@@ -274,38 +231,6 @@ export function deleteTask(id) {
 // ---------- 巡检记录 ----------
 
 export function getRecordPage(params = {}) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      let list = [...recordRows]
-      const { plan, device, inspector, result, startTime, endTime, pageNumber = 1, pageSize = 20 } = params
-      if (plan) {
-        const kw = String(plan).toLowerCase()
-        list = list.filter((r) => r.plan?.toLowerCase().includes(kw))
-      }
-      if (device) {
-        const kw = String(device).toLowerCase()
-        list = list.filter((r) => {
-          if (r.deviceResults?.length) return r.deviceResults.some((d) => d.device?.toLowerCase().includes(kw))
-          return r.device?.toLowerCase().includes(kw)
-        })
-      }
-      if (inspector) {
-        const kw = String(inspector).toLowerCase()
-        list = list.filter((r) => r.inspector?.toLowerCase().includes(kw))
-      }
-      if (result) list = list.filter((r) => r.result === result)
-      if (startTime && endTime) {
-        list = list.filter((r) => {
-          const d = r.submitTime?.slice(0, 10)
-          return d && d >= startTime && d <= endTime
-        })
-      }
-      const total = list.length
-      const start = (pageNumber - 1) * pageSize
-      list = list.slice(start, start + pageSize)
-      return { list: list.map(toKey), total }
-    })
-  }
   return request({
     url: '/inspection/record/page',
     method: 'get',
@@ -327,12 +252,6 @@ export function getRecordPage(params = {}) {
 }
 
 export function getRecordById(id) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      const r = recordRows.find((rec) => String(rec.key) === String(id))
-      return r ? toKey(r) : null
-    })
-  }
   const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
   return request({ url: `/inspection/record/${id}`, method: 'get' }).then((data) => {
     if (!data) return null
@@ -351,26 +270,6 @@ export function getRecordById(id) {
 }
 
 export function getRecordDevice(recordId, deviceCode) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      const rec = recordRows.find((r) => String(r.key) === String(recordId))
-      if (!rec) return null
-      if (rec.deviceResults?.length) {
-        const dr = rec.deviceResults.find((d) => d.device === deviceCode)
-        return dr ?? null
-      }
-      if (rec.device === deviceCode) {
-        return {
-          device: rec.device,
-          deviceType: '-',
-          result: rec.result,
-          items: rec.items ?? [],
-          photoUrls: rec.photoUrls ?? [],
-        }
-      }
-      return null
-    })
-  }
   const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
   return request({
     url: '/inspection/record/device',

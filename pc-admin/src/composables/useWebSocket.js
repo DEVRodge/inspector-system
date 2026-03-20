@@ -13,7 +13,7 @@ export function useWebSocket(onMessage) {
 
   function connect() {
     const baseUrl = import.meta.env.VITE_WS_URL
-    if (!baseUrl || import.meta.env.VITE_ENABLE_MOCK === 'true') return
+    if (!baseUrl) return
 
     const token = localStorage.getItem(TOKEN_KEY)
     if (!token) return

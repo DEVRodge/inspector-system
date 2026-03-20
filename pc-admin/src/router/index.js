@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useAppMenuStore } from '../stores/appMenu'
+import { collectMenuPathsFromTree } from '../utils/menuPaths'
 
 const routes = [
   {
@@ -50,7 +52,7 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
   if (to.meta?.title) {
@@ -63,6 +65,17 @@ router.beforeEach((to) => {
 
   if (to.path === '/login' && authStore.isLoggedIn) {
     return '/dashboard'
+  }
+
+  if (authStore.isLoggedIn && to.name === 'settings') {
+    const menuStore = useAppMenuStore()
+    if (menuStore.status !== 'ready' || !menuStore.rawTree?.length) {
+      await menuStore.fetchMenus().catch(() => {})
+    }
+    const paths = collectMenuPathsFromTree(menuStore.rawTree)
+    if (!paths.has('/settings')) {
+      return { name: 'forbidden' }
+    }
   }
 
   return true

@@ -1,18 +1,8 @@
 /**
  * 设备台账相关接口，对接后端 /device/*
- *
- * 列表：GET /device/page
- * 详情：GET /device/{id}
- * 新增：POST /device
- * 修改：PUT /device/{id}
- * 删除：DELETE /device/{id}
- * 导出模板：GET /device/import/template
- * 导出 Excel：GET /device/export
- * 导入设备：POST /device/import
  */
-import { http, isMockEnabled, mockRequest, request } from '../http'
+import { http, request } from '../http'
 import { getOrganizationsList } from './organization'
-import { equipmentRows } from '../../mock/equipment'
 
 function toKey(item) {
   if (!item) return item
@@ -26,15 +16,6 @@ function toKey(item) {
 }
 
 export function getDepartments() {
-  if (isMockEnabled) {
-    return mockRequest(() => ({
-      list: [
-        { id: '1', name: '运维部' },
-        { id: '2', name: '设备部' },
-        { id: '3', name: '信息部' },
-      ],
-    }))
-  }
   return getOrganizationsList().then((data) => {
     const arr = Array.isArray(data) ? data : data?.list ?? []
     const list = arr.map((o) => (typeof o === 'string' ? { id: o, name: o } : { id: o.id, name: o.name ?? o.id }))
@@ -43,26 +24,6 @@ export function getDepartments() {
 }
 
 export function getDevicePage(params = {}) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      let list = [...equipmentRows]
-      const { keyword, type, status, pageNumber = 1, pageSize = 20 } = params
-      if (keyword) {
-        const kw = String(keyword).toLowerCase()
-        list = list.filter(
-          (r) =>
-            (r.code && r.code.toLowerCase().includes(kw)) ||
-            (r.name && r.name.toLowerCase().includes(kw)),
-        )
-      }
-      if (type) list = list.filter((r) => r.type === type)
-      if (status) list = list.filter((r) => r.status === status)
-      const total = list.length
-      const start = (pageNumber - 1) * pageSize
-      list = list.slice(start, start + pageSize)
-      return { list: list.map(toKey), total }
-    })
-  }
   return request({
     url: '/device/page',
     method: 'get',
@@ -81,16 +42,10 @@ export function getDevicePage(params = {}) {
 }
 
 export function getDeviceById(id) {
-  if (isMockEnabled) {
-    return mockRequest(() => {
-      const r = equipmentRows.find((e) => String(e.key) === String(id) || String(e.id) === String(id))
-      return r ? toKey({ ...r, id: r.key ?? r.id }) : null
-    })
-  }
   return request({ url: `/device/${id}`, method: 'get' }).then((data) => (data ? toKey(data) : null))
 }
 
-/** Apifox DeviceModifyParam: code, type, name, status 必填；organizationId, commissionDate 等可选 */
+/** Apifox DeviceModifyParam */
 function buildDevicePayload(data, forCreate = false) {
   const raw = {
     code: data.code,
@@ -109,9 +64,6 @@ function buildDevicePayload(data, forCreate = false) {
 }
 
 export function createDevice(data) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ id: `${Date.now()}`, ...data }))
-  }
   const payload = buildDevicePayload(data, true)
   return request({
     url: '/device',
@@ -121,9 +73,6 @@ export function createDevice(data) {
 }
 
 export function updateDevice(id, data) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ id, ...data }))
-  }
   const payload = buildDevicePayload(data, false)
   return request({
     url: `/device/${id}`,
@@ -133,9 +82,6 @@ export function updateDevice(id, data) {
 }
 
 export function deleteDevice(id) {
-  if (isMockEnabled) {
-    return mockRequest(() => ({ success: true }))
-  }
   return request({ url: `/device/${id}`, method: 'delete' })
 }
 

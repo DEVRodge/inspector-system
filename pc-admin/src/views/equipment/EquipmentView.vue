@@ -14,9 +14,8 @@ import {
 } from '../../api/modules/equipment'
 import { getDictionaryList } from '../../api/modules/dictionary'
 import { getApiErrorMessage } from '../../utils/error'
-import { DEVICE_STATUS_DICT_CODE, DEVICE_STATUS_OPTIONS, DEVICE_TYPE_DICT_CODE, DEVICE_TYPE_OPTIONS, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
-import { equipmentRows } from '../../mock/data'
-import { isMockEnabled } from '../../api/http'
+import { DEVICE_STATUS_DICT_CODE, DEVICE_TYPE_DICT_CODE } from '../../constants/dictionaries'
+import { generateLabeledQrcodeDataUrl, triggerPngDownload } from '../../utils/deviceQrcodeCanvas'
 
 const query = reactive({
   keyword: '',
@@ -49,27 +48,9 @@ const formState = reactive({
   status: '',
 })
 
-const filteredRows = computed(() => {
-  if (isMockEnabled) {
-    return rows.value.filter((item) => {
-      const keywordMatch =
-        !query.keyword ||
-        item.code?.toLowerCase().includes(query.keyword.toLowerCase()) ||
-        item.name?.toLowerCase().includes(query.keyword.toLowerCase())
-      const typeMatch = !query.type || item.type === query.type
-      const statusMatch = !query.status || item.status === query.status
-      return keywordMatch && typeMatch && statusMatch
-    })
-  }
-  return rows.value
-})
+const filteredRows = computed(() => rows.value)
 
 async function loadList() {
-  if (isMockEnabled) {
-    rows.value = equipmentRows.map((r) => ({ ...r, key: r.key ?? r.id }))
-    pagination.total = rows.value.length
-    return
-  }
   loading.value = true
   try {
     const res = await getDevicePage({
@@ -141,42 +122,26 @@ const deviceTypeOptions = ref([])
 const deviceStatusOptions = ref([])
 
 async function loadDeviceTypes() {
-  if (isMockEnabled) {
-    deviceTypeOptions.value = mockDeviceTypes
-      .filter((d) => d.category === DEVICE_TYPE_DICT_CODE && d.status === '启用')
-      .map((d) => ({ value: d.code ?? d.label, label: d.label }))
-  } else {
-    try {
-      const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
-      const arr = Array.isArray(list) ? list : list?.list ?? []
-      deviceTypeOptions.value = (arr || [])
-        .filter((d) => d.enabled !== false)
-        .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
-      if (deviceTypeOptions.value.length === 0) {
-        deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
-      }
-    } catch {
-      deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
-    }
+  try {
+    const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
+    const arr = Array.isArray(list) ? list : list?.list ?? []
+    deviceTypeOptions.value = (arr || [])
+      .filter((d) => d.enabled !== false)
+      .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
+  } catch {
+    deviceTypeOptions.value = []
   }
 }
 
 async function loadDeviceStatuses() {
-  if (isMockEnabled) {
-    deviceStatusOptions.value = DEVICE_STATUS_OPTIONS
-    return
-  }
   try {
     const list = await getDictionaryList(DEVICE_STATUS_DICT_CODE)
     const arr = Array.isArray(list) ? list : list?.list ?? []
     deviceStatusOptions.value = (arr || [])
       .filter((d) => d.enabled !== false)
       .map((d) => ({ value: d.value ?? d.name, label: d.name ?? d.value }))
-    if (deviceStatusOptions.value.length === 0) {
-      deviceStatusOptions.value = DEVICE_STATUS_OPTIONS
-    }
   } catch {
-    deviceStatusOptions.value = DEVICE_STATUS_OPTIONS
+    deviceStatusOptions.value = []
   }
 }
 
@@ -262,34 +227,23 @@ async function saveRow() {
 
   if (currentRow.value) {
     const id = currentRow.value.id ?? currentRow.value.key
-    if (isMockEnabled) {
-      const index = rows.value.findIndex((item) => (item.key ?? item.id) === id)
-      if (index >= 0) rows.value[index] = { ...formState, key: id }
+    try {
+      await updateDevice(id, payload)
       message.success('设备信息已更新')
-    } else {
-      try {
-        await updateDevice(id, payload)
-        message.success('设备信息已更新')
-        loadList()
-      } catch (err) {
-        message.error(getApiErrorMessage(err))
-        return
-      }
+      loadList()
+    } catch (err) {
+      message.error(getApiErrorMessage(err))
+      return
     }
   } else {
-    if (isMockEnabled) {
-      rows.value.unshift({ ...formState, key: `${Date.now()}` })
+    try {
+      await createDevice(payload)
       message.success('设备已新增')
-    } else {
-      try {
-        await createDevice(payload)
-        message.success('设备已新增')
-        formVisible.value = false
-        loadList()
-      } catch (err) {
-        message.error(getApiErrorMessage(err))
-        return
-      }
+      formVisible.value = false
+      loadList()
+    } catch (err) {
+      message.error(getApiErrorMessage(err))
+      return
     }
   }
 
@@ -299,20 +253,15 @@ async function saveRow() {
 function removeRow(record) {
   Modal.confirm({
     title: `确认删除设备 ${record.code} 吗？`,
-    content: isMockEnabled ? '当前为静态演示，删除只影响前端页面展示。' : '删除后不可恢复。',
+    content: '删除后不可恢复。',
     async onOk() {
       const id = record.id ?? record.key
-      if (isMockEnabled) {
-        rows.value = rows.value.filter((item) => (item.key ?? item.id) !== id)
+      try {
+        await deleteDevice(id)
         message.success('设备已删除')
-      } else {
-        try {
-          await deleteDevice(id)
-          message.success('设备已删除')
-          loadList()
-        } catch {
-          message.error('删除失败，请稍后重试')
-        }
+        loadList()
+      } catch {
+        message.error('删除失败，请稍后重试')
       }
     },
   })
@@ -346,85 +295,19 @@ function closeQrcode() {
 
 const downloadLoading = ref(false)
 
-function wrapText(ctx, text, maxWidth) {
-  const lines = []
-  let line = ''
-  for (const char of text) {
-    const test = line + char
-    const { width } = ctx.measureText(test)
-    if (width > maxWidth && line) {
-      lines.push(line)
-      line = char
-    } else {
-      line = test
-    }
-  }
-  if (line) lines.push(line)
-  return lines
-}
-
 async function handleDownloadQrcode() {
   if (!qrcodeRecord.value) return
 
   downloadLoading.value = true
   try {
     const record = qrcodeRecord.value
-    const canvasWidth = PREVIEW_WIDTH
-    const canvasHeight = PREVIEW_HEIGHT
-
-    const qrSize = 400
-    const pad = 60
-    const qrDataUrl = await QRCode.toDataURL(record.code, { width: qrSize, margin: 2 })
-
-    const img = new Image()
-    await new Promise((resolve, reject) => {
-      img.onload = resolve
-      img.onerror = reject
-      img.src = qrDataUrl
+    const dataUrl = await generateLabeledQrcodeDataUrl(record, {
+      canvasWidth: PREVIEW_WIDTH,
+      canvasHeight: PREVIEW_HEIGHT,
     })
-
-    const lineHeight = 32
-    const texts = [
-      `设备名称：${record.name || '-'}`,
-      `设备编码：${record.code || '-'}`,
-      `型号：${record.model || '-'}`,
-    ]
-
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    canvas.width = canvasWidth
-    canvas.height = canvasHeight
-
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight)
-
-    ctx.drawImage(img, (canvasWidth - qrSize) / 2, pad, qrSize, qrSize)
-
-    ctx.fillStyle = '#1f2329'
-    ctx.font = '24px "PingFang SC", "Microsoft YaHei", sans-serif'
-    ctx.textAlign = 'center'
-
-    const maxTextWidth = canvasWidth - pad * 2
-    const allWrapped = []
-    for (const text of texts) {
-      allWrapped.push(wrapText(ctx, text, maxTextWidth))
-    }
-
-    let y = pad + qrSize + 48
-    for (const wrapped of allWrapped) {
-      for (const w of wrapped) {
-        ctx.fillText(w, canvasWidth / 2, y)
-        y += lineHeight
-      }
-    }
-
-    const dataUrl = canvas.toDataURL('image/png')
-    const a = document.createElement('a')
-    a.href = dataUrl
-    a.download = `二维码_${record.code}.png`
-    a.click()
+    triggerPngDownload(dataUrl, `二维码_${record.code}.png`)
     message.success('二维码已下载')
-  } catch (err) {
+  } catch {
     message.error('下载失败，请稍后重试')
   } finally {
     downloadLoading.value = false
@@ -499,7 +382,7 @@ async function handleImportFile(e) {
     const successCount = data?.successCount ?? data?.count ?? 0
     if (data?.success && successCount > 0) {
       message.success(`成功导入 ${successCount} 条设备`)
-      if (!isMockEnabled) loadList()
+      loadList()
     } else if (data?.errors?.length) {
       Modal.warning({
         title: '部分行导入失败',
@@ -544,14 +427,14 @@ async function handleImportFile(e) {
           <a-input v-model:value="query.keyword" placeholder="搜索设备编码/名称" allow-clear />
           <a-select v-model:value="query.type" placeholder="设备类型" allow-clear style="width: 180px" :options="deviceTypeOptions" />
           <a-select v-model:value="query.status" placeholder="运行状态" allow-clear style="width: 180px" :options="deviceStatusOptions" />
-          <a-button v-if="!isMockEnabled" type="primary" @click="() => { pagination.current = 1; loadList() }">查询</a-button>
+          <a-button type="primary" @click="() => { pagination.current = 1; loadList() }">查询</a-button>
         </div>
       </div>
 
       <a-table
         :data-source="filteredRows"
         :loading="loading"
-        :pagination="isMockEnabled ? false : { ...pagination, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }"
+        :pagination="{ ...pagination, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }"
         row-key="key"
         @change="onTableChange"
       >

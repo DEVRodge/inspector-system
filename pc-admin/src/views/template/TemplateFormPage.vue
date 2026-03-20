@@ -4,9 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { getDictionaryList } from '../../api/modules/dictionary'
 import { getApiErrorMessage } from '../../utils/error'
-import { DEVICE_TYPE_DICT_CODE, DEVICE_TYPE_OPTIONS, TEMPLATE_STATUS_DICT_CODE, TEMPLATE_STATUS_OPTIONS, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
+import { DEVICE_TYPE_DICT_CODE, TEMPLATE_STATUS_DICT_CODE } from '../../constants/dictionaries'
 import { useTemplateStore } from '../../stores/template'
-import { isMockEnabled } from '../../api/http'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,42 +16,26 @@ const deviceTypeOptions = ref([])
 const templateStatusOptions = ref([])
 
 async function loadDeviceTypes() {
-  if (isMockEnabled) {
-    deviceTypeOptions.value = mockDeviceTypes
-      .filter((d) => d.category === DEVICE_TYPE_DICT_CODE && d.status === '启用')
-      .map((d) => ({ value: d.code ?? d.label, label: d.label }))
-  } else {
-    try {
-      const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
-      const arr = Array.isArray(list) ? list : list?.list ?? []
-      deviceTypeOptions.value = (arr || [])
-        .filter((d) => d.enabled !== false)
-        .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
-      if (deviceTypeOptions.value.length === 0) {
-        deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
-      }
-    } catch {
-      deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
-    }
+  try {
+    const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
+    const arr = Array.isArray(list) ? list : list?.list ?? []
+    deviceTypeOptions.value = (arr || [])
+      .filter((d) => d.enabled !== false)
+      .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
+  } catch {
+    deviceTypeOptions.value = []
   }
 }
 
 async function loadTemplateStatuses() {
-  if (isMockEnabled) {
-    templateStatusOptions.value = TEMPLATE_STATUS_OPTIONS
-    return
-  }
   try {
     const list = await getDictionaryList(TEMPLATE_STATUS_DICT_CODE)
     const arr = Array.isArray(list) ? list : list?.list ?? []
     templateStatusOptions.value = (arr || [])
       .filter((d) => d.enabled !== false)
       .map((d) => ({ value: d.value ?? d.name, label: d.name ?? d.value }))
-    if (templateStatusOptions.value.length === 0) {
-      templateStatusOptions.value = TEMPLATE_STATUS_OPTIONS
-    }
   } catch {
-    templateStatusOptions.value = TEMPLATE_STATUS_OPTIONS
+    templateStatusOptions.value = []
   }
 }
 

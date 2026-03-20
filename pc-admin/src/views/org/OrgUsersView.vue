@@ -1,9 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { orgRows } from '../../mock/data'
 import { getOrganizations } from '../../api/modules/organization'
 import { getUsers } from '../../api/modules/user'
-import { isMockEnabled } from '../../api/http'
 
 const columns = [
   { title: '部门', dataIndex: 'dept' },
@@ -46,14 +44,6 @@ function mapUserToRow(u) {
 }
 
 async function loadOrganizations() {
-  if (isMockEnabled) {
-    orgTree.value = [
-      { key: '1', title: '运维部', children: [] },
-      { key: '2', title: '设备部', children: [] },
-      { key: '3', title: '信息部', children: [] },
-    ]
-    return
-  }
   try {
     const data = await getOrganizations()
     orgTree.value = mapOrgToTree(Array.isArray(data) ? data : data?.list ?? [])
@@ -63,18 +53,6 @@ async function loadOrganizations() {
 }
 
 async function loadUsers() {
-  if (isMockEnabled) {
-    userList.value = orgRows.map((r) => ({
-      key: r.key,
-      dept: r.dept,
-      post: r.post,
-      name: r.name,
-      phone: r.phone,
-      area: r.area,
-      status: r.status,
-    }))
-    return
-  }
   loading.value = true
   try {
     const res = await getUsers({

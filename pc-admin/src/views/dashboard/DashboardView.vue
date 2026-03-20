@@ -1,7 +1,6 @@
 <script setup>
 import { message } from 'ant-design-vue'
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { getDashboardData } from '../../api/modules/dashboard'
 import brandLogo from '../../assets/logo.png'
 
@@ -88,12 +87,6 @@ const monthCompletionPercent = computed(() =>
   Number(stats.value.monthCompletionRate.toFixed(1)),
 )
 
-const router = useRouter()
-
-function handleCreateTask() {
-  router.push({ name: 'taskNew' })
-}
-
 async function loadDashboard() {
   loading.value = true
   try {
@@ -124,10 +117,6 @@ onMounted(() => {
             <h2>设备巡检数字化工作台</h2>
             <p>工作台数据严格对齐接口：设备、任务完成率与异常统计均来自真实接口。</p>
           </div>
-        </div>
-
-        <div class="dashboard-hero__actions">
-          <a-button type="primary" @click="handleCreateTask">新建临时任务</a-button>
         </div>
       </div>
     </a-card>

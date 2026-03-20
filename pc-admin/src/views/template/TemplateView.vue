@@ -12,11 +12,10 @@ import {
   getTemplateItems,
   updateTemplateItem,
 } from '../../api/modules/inspection'
-import { DEVICE_TYPE_DICT_CODE, DEVICE_TYPE_OPTIONS, dictionaryRows as mockDeviceTypes } from '../../mock/modules/settings'
-import { INSPECTION_ITEM_TYPES } from '../../mock/modules/template'
+import { DEVICE_TYPE_DICT_CODE } from '../../constants/dictionaries'
+import { INSPECTION_ITEM_TYPES } from '../../constants/templateForm'
 import { useTemplateStore } from '../../stores/template'
 import InspectionItemTreeModal from '../../components/template/InspectionItemTreeModal.vue'
-import { isMockEnabled } from '../../api/http'
 
 const router = useRouter()
 const templateStore = useTemplateStore()
@@ -25,33 +24,20 @@ const query = reactive({ deviceType: undefined })
 const deviceTypeOptions = ref([])
 
 async function loadDeviceTypes() {
-  if (isMockEnabled) {
-    deviceTypeOptions.value = mockDeviceTypes
-      .filter((d) => d.category === DEVICE_TYPE_DICT_CODE && d.status === '启用')
-      .map((d) => ({ value: d.code ?? d.label, label: d.label }))
-  } else {
-    try {
-      const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
-      const arr = Array.isArray(list) ? list : list?.list ?? []
-      deviceTypeOptions.value = (arr || [])
-        .filter((d) => d.enabled !== false)
-        .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
-      if (deviceTypeOptions.value.length === 0) {
-        deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
-      }
-    } catch {
-      deviceTypeOptions.value = DEVICE_TYPE_OPTIONS
-    }
+  try {
+    const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
+    const arr = Array.isArray(list) ? list : list?.list ?? []
+    deviceTypeOptions.value = (arr || [])
+      .filter((d) => d.enabled !== false)
+      .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
+  } catch {
+    deviceTypeOptions.value = []
   }
 }
 
 const loading = ref(false)
 
 async function loadList() {
-  if (isMockEnabled) {
-    await templateStore.loadList()
-    return
-  }
   loading.value = true
   try {
     await templateStore.loadList({
@@ -120,16 +106,14 @@ async function openDetail(record) {
   const id = record.id ?? record.key
   detailVisible.value = true
   currentRow.value = record
-  if (!isMockEnabled) {
-    detailLoading.value = true
-    try {
-      const full = await getTemplateById(id)
-      if (full) currentRow.value = full
-    } catch {
-      message.error('加载模板详情失败')
-    } finally {
-      detailLoading.value = false
-    }
+  detailLoading.value = true
+  try {
+    const full = await getTemplateById(id)
+    if (full) currentRow.value = full
+  } catch {
+    message.error('加载模板详情失败')
+  } finally {
+    detailLoading.value = false
   }
 }
 
@@ -139,22 +123,17 @@ function openEdit(record) {
 
 async function openItemConfig(record) {
   const id = record.id ?? record.key
-  if (!isMockEnabled) {
-    itemConfigLoading.value = true
-    itemConfigLoadingId.value = id
-    try {
-      const items = await getTemplateItems(id)
-      configTarget.value = { ...record, items: items ?? [] }
-      itemModalOpen.value = true
-    } catch {
-      message.error('加载巡检项失败')
-    } finally {
-      itemConfigLoading.value = false
-      itemConfigLoadingId.value = null
-    }
-  } else {
-    configTarget.value = { ...record, items: record.items ?? [] }
+  itemConfigLoading.value = true
+  itemConfigLoadingId.value = id
+  try {
+    const items = await getTemplateItems(id)
+    configTarget.value = { ...record, items: items ?? [] }
     itemModalOpen.value = true
+  } catch {
+    message.error('加载巡检项失败')
+  } finally {
+    itemConfigLoading.value = false
+    itemConfigLoadingId.value = null
   }
 }
 
@@ -163,17 +142,6 @@ async function onItemsUpdate(newItems) {
   const templateId = configTarget.value.id ?? configTarget.value.key
   const currentItems = configTarget.value.items ?? []
   const items = newItems ?? []
-
-  if (isMockEnabled) {
-    try {
-      await templateStore.update(templateId, { ...configTarget.value, items })
-      itemModalOpen.value = false
-      configTarget.value = null
-    } catch {
-      message.error('保存巡检项失败')
-    }
-    return
-  }
 
   try {
     const currentIds = new Set(currentItems.map((it) => String(it.id ?? it.key)).filter(Boolean))

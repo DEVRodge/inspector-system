@@ -15,7 +15,7 @@
 | 消息中心 | `/msg-record/*` | 已对接 | 未读数、列表、一键已读、批量已读 |
 | 异常管理 | `/inspection/exception/*` | 已对接 | 分页、详情、指派、处理 |
 | 文件上传与预览 | `/file/*` | 已对接 | 上传、预览 URL 构建 |
-| 异常指派 | `/users/assignable-tree` | 待对接 | 可指派人员树（部门-岗位-人员），Mock 已实现 |
+| 异常指派 | `/users/assignable-tree` | 已对接 | 可指派人员树（部门-岗位-人员） |
 
 ---
 
@@ -189,19 +189,11 @@
 
 | 模块 | 原因 |
 |------|------|
-| 工作台 | 后端暂无 `/dashboard/overview` 接口，保持 Mock |
+| 工作台 | 使用 `GET /inspection/dashboard/stats`（见 `api/modules/dashboard.js`） |
 
 ---
 
-## 四、Mock 切换
-
-- **环境变量**：`VITE_ENABLE_MOCK`
-- **默认值**：`true`（使用 Mock 数据）
-- **联调时**：在 `.env.development` 中设置 `VITE_ENABLE_MOCK=false` 走真实接口
-
----
-
-## 五、联调建议
+## 四、联调建议
 
 1. **Base URL**：确保 `VITE_API_BASE_URL` 指向后端服务（如 `http://localhost:8080/api`）
 2. **WebSocket 消息推送**：`VITE_WS_URL` 配置 WebSocket 地址（如 `ws://127.0.0.1:4009/websocket/msg`），部署到云服务器时改为 `wss://域名/websocket/msg`
@@ -211,7 +203,7 @@
 
 ---
 
-## 六、文件变更清单
+## 五、文件变更清单
 
 | 文件 | 变更 |
 |------|------|

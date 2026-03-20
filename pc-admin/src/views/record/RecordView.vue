@@ -2,9 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { recordRows } from '../../mock/data'
 import { getRecordPage } from '../../api/modules/inspection'
-import { isMockEnabled } from '../../api/http'
 
 const router = useRouter()
 const rows = ref([])
@@ -24,11 +22,6 @@ const query = reactive({
 })
 
 async function loadList() {
-  if (isMockEnabled) {
-    rows.value = [...recordRows]
-    pagination.total = rows.value.length
-    return
-  }
   loading.value = true
   try {
     const [start, end] = query.timeRange || []
@@ -90,14 +83,14 @@ onMounted(() => loadList())
             <a-select-option value="异常">异常</a-select-option>
           </a-select>
           <a-range-picker v-model:value="query.timeRange" style="width: 280px" />
-          <a-button v-if="!isMockEnabled" type="primary" @click="() => { pagination.current = 1; loadList() }">查询</a-button>
+          <a-button type="primary" @click="() => { pagination.current = 1; loadList() }">查询</a-button>
         </div>
       </div>
 
       <a-table
         :data-source="rows"
         :loading="loading"
-        :pagination="isMockEnabled ? false : { ...pagination, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }"
+        :pagination="{ ...pagination, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }"
         row-key="key"
         @change="onTableChange"
       >

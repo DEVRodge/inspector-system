@@ -70,7 +70,7 @@ a {
 .dashboard-hero__content {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 24px;
 }
 
@@ -129,18 +129,6 @@ a {
   font-size: 14px;
 }
 
-.dashboard-hero__actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.dashboard-hero__actions .ant-btn-default {
-  border-color: rgba(22, 119, 255, 0.2);
-  box-shadow: none;
-}
-
 .table-toolbar {
   display: flex;
   justify-content: space-between;
@@ -178,48 +166,6 @@ a {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-}
-
-.mock-chart {
-  height: 280px;
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(22, 119, 255, 0.12), rgba(22, 119, 255, 0.02)),
-    #fafcff;
-  border: 1px solid #e5e6eb;
-  position: relative;
-  overflow: hidden;
-}
-
-.mock-chart::before,
-.mock-chart::after {
-  content: '';
-  position: absolute;
-  inset: auto 24px 24px 24px;
-  height: 120px;
-  border-radius: 999px 999px 0 0;
-  border: 2px solid rgba(22, 119, 255, 0.2);
-  border-bottom: none;
-}
-
-.mock-chart::after {
-  inset: auto 56px 24px 56px;
-  height: 84px;
-  border-color: rgba(82, 196, 26, 0.25);
-}
-
-.mock-bars {
-  display: flex;
-  align-items: end;
-  gap: 16px;
-  height: 220px;
-  padding: 24px;
-}
-
-.mock-bars span {
-  flex: 1;
-  border-radius: 10px 10px 0 0;
-  background: linear-gradient(180deg, #91caff, #1677ff);
 }
 
 .metric-card__footer {
@@ -359,10 +305,6 @@ a {
   .dashboard-hero__brand {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .dashboard-hero__actions {
-    width: 100%;
   }
 
   .filter-grid,

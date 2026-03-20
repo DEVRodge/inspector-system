@@ -734,8 +734,8 @@ async function loadPermFromApi() {
 
 async function loadMenuTreeFromApi() {
   try {
-    const data = await getMenusTree({ endType: 'WEB', enabled: true })
-    const arr = Array.isArray(data) ? data : data?.data ?? []
+    // 与文档 GET /menus 一致；不传 enabled，避免库中未标「启用」的菜单被筛掉导致空树
+    const arr = await getMenusTree({ endType: 'WEB' })
     menuTree.value = menuVoToTree(arr).map((n) => ({ ...n, selectable: false }))
   } catch (e) {
     message.error('加载菜单树失败：' + (e?.message || '未知错误'))

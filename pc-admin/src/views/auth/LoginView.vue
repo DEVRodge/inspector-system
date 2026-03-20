@@ -4,9 +4,11 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { LockOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { useAuthStore } from '../../stores/auth'
+import { useAppMenuStore } from '../../stores/appMenu'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const appMenuStore = useAppMenuStore()
 const loading = ref(false)
 
 const formState = reactive({
@@ -23,6 +25,8 @@ async function submit() {
   loading.value = true
   try {
     await authStore.login(formState.username.trim(), formState.password)
+    appMenuStore.reset()
+    await appMenuStore.fetchMenus()
     message.success('登录成功，已进入管理后台')
     router.push('/dashboard')
   } catch (err) {
