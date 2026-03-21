@@ -57,23 +57,6 @@ function openDetail(record) {
   router.push({ name: 'recordDetail', params: { id: record.key ?? record.id } })
 }
 
-/** 列表「设备」列：优先设备名称，与接口 devices[].deviceName 对齐 */
-function formatRecordDeviceColumn(record) {
-  const labelFromDeviceRow = (d) =>
-    d?.deviceName || d?.deviceCode || d?.device || ''
-  if (record.devices?.length) {
-    const first = labelFromDeviceRow(record.devices[0])
-    return record.devices.length > 1 ? `${first || '—'} 等 ${record.devices.length} 台` : first || '—'
-  }
-  if (record.deviceResults?.length) {
-    const first = labelFromDeviceRow(record.deviceResults[0])
-    return record.deviceResults.length > 1
-      ? `${first || '—'} 等 ${record.deviceResults.length} 台`
-      : first || '—'
-  }
-  return record.deviceName || record.device || record.deviceCode || '—'
-}
-
 onMounted(() => loadList())
 </script>
 
@@ -112,13 +95,8 @@ onMounted(() => loadList())
         @change="onTableChange"
       >
         <a-table-column title="任务名称" data-index="plan" key="plan" width="140" />
-        <a-table-column title="设备名称" key="device" width="200">
-          <template #default="{ record }">
-            {{ formatRecordDeviceColumn(record) }}
-          </template>
-        </a-table-column>
         <a-table-column title="巡检人" data-index="inspector" key="inspector" width="100" />
-        <a-table-column title="提交时间" data-index="submitTime" key="submitTime" width="170" />
+        <a-table-column title="任务开始时间" data-index="taskStartTime" key="taskStartTime" width="180" />
         <a-table-column title="结果" data-index="result" key="result" width="100" />
         <a-table-column title="照片数" data-index="photos" key="photos" width="90" />
         <a-table-column title="操作" key="action" width="100">

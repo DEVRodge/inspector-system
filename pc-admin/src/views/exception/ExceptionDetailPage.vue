@@ -175,7 +175,6 @@ onMounted(async () => {
         <a-descriptions-item label="设备编码">{{ exception.device }}</a-descriptions-item>
         <a-descriptions-item label="设备名称">{{ exception.deviceName || '-' }}</a-descriptions-item>
         <a-descriptions-item label="异常描述">{{ exception.desc }}</a-descriptions-item>
-        <a-descriptions-item label="截止时间">{{ formatDateTime(exception.deadline) }}</a-descriptions-item>
         <a-descriptions-item label="创建时间">{{ formatDateTime(exception.createTime) }}</a-descriptions-item>
         <a-descriptions-item label="处理人">
           {{ exception.handler || '未指派' }}

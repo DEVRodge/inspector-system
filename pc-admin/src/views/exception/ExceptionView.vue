@@ -191,9 +191,6 @@ onMounted(() => {
         <a-table-column title="设备编码" data-index="device" key="device" width="120" />
         <a-table-column title="设备名称" data-index="deviceName" key="deviceName" width="140" />
         <a-table-column title="异常描述" data-index="desc" key="desc" />
-        <a-table-column title="截止时间" key="deadline" width="170">
-          <template #default="{ record }">{{ formatDateTime(record.deadline) }}</template>
-        </a-table-column>
         <a-table-column title="处理人" key="handler" width="110">
           <template #default="{ record }">
             {{ record.handler || '未指派' }}

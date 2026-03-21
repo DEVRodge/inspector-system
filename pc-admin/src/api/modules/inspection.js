@@ -302,6 +302,13 @@ function flattenInspectionRecordItems(items) {
   return rows
 }
 
+function firstNonEmptyTime(...candidates) {
+  for (const v of candidates) {
+    if (v != null && v !== '') return v
+  }
+  return null
+}
+
 /** 列表行 / 详情根对象字段对齐 */
 function normalizeInspectionRecordRoot(raw) {
   if (!raw) return raw
@@ -313,6 +320,14 @@ function normalizeInspectionRecordRoot(raw) {
     r.fileCount ??
     (typeof r.attachmentsCount === 'number' ? r.attachmentsCount : countFilesInDevices(devices))
   const rawSubmitTime = r.submitTime ?? r.executeTime ?? r.finishTime ?? r.createTime
+  /** 列表「任务开始时间」：与 Apifox 记录 executeTime（应执行/开始）一致，兼容别名字段 */
+  const rawTaskStart = firstNonEmptyTime(
+    r.executeTime,
+    r.startTime,
+    r.planStartTime,
+    r.beginTime,
+    r.createTime,
+  )
   return {
     ...r,
     plan: r.plan ?? r.taskName ?? r.taskInfo?.name ?? '',
@@ -320,6 +335,10 @@ function normalizeInspectionRecordRoot(raw) {
     submitTime:
       rawSubmitTime != null && rawSubmitTime !== ''
         ? formatDateTime(rawSubmitTime)
+        : '—',
+    taskStartTime:
+      rawTaskStart != null && rawTaskStart !== ''
+        ? formatDateTime(rawTaskStart)
         : '—',
     result: mapInspectionResultLabel(r.result, r.resultDesc),
     photos: typeof photoCount === 'number' ? photoCount : countFilesInDevices(devices),
