@@ -1,29 +1,68 @@
 /**
  * WebSocket 消息推送连接
- * 使用 VITE_WS_URL 环境变量，部署到云服务器时在 .env.production 中修改为 wss://域名/websocket/msg
+ * - VITE_WS_URL：完整地址如 wss://api.example.com/websocket/msg；或相对路径如 /websocket/msg（与当前页面同源，开发时走 Vite 代理）
  */
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from '../stores/auth'
 
 const TOKEN_KEY = 'pc-admin-token'
 
+function resolveWsBaseUrl() {
+  const raw = (import.meta.env.VITE_WS_URL || '').trim()
+  if (raw.startsWith('/')) {
+    if (typeof window === 'undefined') return ''
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${proto}//${window.location.host}${raw}`
+  }
+  if (raw) return raw
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${proto}//${window.location.host}/websocket/msg`
+  }
+  return ''
+}
+
 export function useWebSocket(onMessage) {
+  const authStore = useAuthStore()
+  const { token } = storeToRefs(authStore)
+
   const wsRef = ref(null)
   const reconnectTimer = ref(null)
   const reconnectDelay = 3000
+  /** 主动断开时不触发 onclose 里的自动重连 */
+  let closingIntentionally = false
 
   function connect() {
-    const baseUrl = import.meta.env.VITE_WS_URL
-    if (!baseUrl) return
+    const baseUrl = resolveWsBaseUrl()
+    if (!baseUrl) {
+      if (import.meta.env.DEV) {
+        console.warn('[WebSocket] 未配置 VITE_WS_URL，跳过连接')
+      }
+      return
+    }
 
-    const token = localStorage.getItem(TOKEN_KEY)
-    if (!token) return
+    const tokenVal = token.value || (typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : '')
+    if (!tokenVal) {
+      if (import.meta.env.DEV) {
+        console.warn('[WebSocket] 无登录 token，跳过连接')
+      }
+      return
+    }
 
-    const url = baseUrl.includes('?') ? `${baseUrl}&token=${encodeURIComponent(token)}` : `${baseUrl}?token=${encodeURIComponent(token)}`
+    const url = baseUrl.includes('?')
+      ? `${baseUrl}&token=${encodeURIComponent(tokenVal)}`
+      : `${baseUrl}?token=${encodeURIComponent(tokenVal)}`
+
+    closingIntentionally = false
     try {
       const ws = new WebSocket(url)
       wsRef.value = ws
 
       ws.onopen = () => {
+        if (import.meta.env.DEV) {
+          console.info('[WebSocket] 已连接', baseUrl.replace(/\?.*$/, ''))
+        }
         if (reconnectTimer.value) {
           clearTimeout(reconnectTimer.value)
           reconnectTimer.value = null
@@ -41,12 +80,21 @@ export function useWebSocket(onMessage) {
 
       ws.onclose = () => {
         wsRef.value = null
-        if (localStorage.getItem(TOKEN_KEY)) {
+        if (closingIntentionally) {
+          closingIntentionally = false
+          return
+        }
+        const stillLoggedIn =
+          (typeof localStorage !== 'undefined' && localStorage.getItem(TOKEN_KEY)) || token.value
+        if (stillLoggedIn) {
           reconnectTimer.value = setTimeout(connect, reconnectDelay)
         }
       }
 
       ws.onerror = () => {
+        if (import.meta.env.DEV) {
+          console.warn('[WebSocket] 连接错误', baseUrl.replace(/\?.*$/, ''))
+        }
         ws.close()
       }
     } catch (e) {
@@ -61,14 +109,22 @@ export function useWebSocket(onMessage) {
       reconnectTimer.value = null
     }
     if (wsRef.value) {
+      closingIntentionally = true
       wsRef.value.close()
       wsRef.value = null
     }
   }
 
-  onMounted(() => {
-    connect()
-  })
+  watch(
+    token,
+    (t) => {
+      disconnect()
+      if (t) {
+        connect()
+      }
+    },
+    { immediate: true },
+  )
 
   onUnmounted(() => {
     disconnect()

@@ -107,6 +107,7 @@ function goBack() {
           {{ record.deviceName || record.device || record.deviceCode || '—' }}
         </a-descriptions-item>
         <a-descriptions-item label="巡检人">{{ record.inspector }}</a-descriptions-item>
+        <a-descriptions-item label="任务完成时间">{{ formatDateTime(record.completeTime) }}</a-descriptions-item>
         <a-descriptions-item label="提交时间">{{ formatDateTime(record.submitTime) }}</a-descriptions-item>
         <a-descriptions-item label="巡检结果">{{ record.result }}</a-descriptions-item>
         <a-descriptions-item label="照片数量">{{ record.photos }}</a-descriptions-item>

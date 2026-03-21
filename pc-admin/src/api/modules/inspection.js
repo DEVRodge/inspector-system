@@ -340,6 +340,11 @@ function normalizeInspectionRecordRoot(raw) {
       rawTaskStart != null && rawTaskStart !== ''
         ? formatDateTime(rawTaskStart)
         : '—',
+    /** 任务完成时间：后端 completeTime */
+    completeTime:
+      r.completeTime != null && r.completeTime !== ''
+        ? formatDateTime(r.completeTime)
+        : '—',
     result: mapInspectionResultLabel(r.result, r.resultDesc),
     photos: typeof photoCount === 'number' ? photoCount : countFilesInDevices(devices),
   }

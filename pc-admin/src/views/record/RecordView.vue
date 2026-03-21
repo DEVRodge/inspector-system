@@ -97,6 +97,7 @@ onMounted(() => loadList())
         <a-table-column title="任务名称" data-index="plan" key="plan" width="140" />
         <a-table-column title="巡检人" data-index="inspector" key="inspector" width="100" />
         <a-table-column title="任务开始时间" data-index="taskStartTime" key="taskStartTime" width="180" />
+        <a-table-column title="任务完成时间" data-index="completeTime" key="completeTime" width="180" />
         <a-table-column title="结果" data-index="result" key="result" width="100" />
         <a-table-column title="照片数" data-index="photos" key="photos" width="90" />
         <a-table-column title="操作" key="action" width="100">

@@ -16,6 +16,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      // WebSocket 与 HTTP 同源走代理，避免浏览器直连云主机端口被拦
+      '/websocket': {
+        target: 'http://1.14.47.50:4009',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
   resolve: {
