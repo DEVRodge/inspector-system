@@ -4,6 +4,4 @@
 
 export const DEVICE_TYPE_DICT_CODE = 'device_type'
 
-export const DEVICE_STATUS_DICT_CODE = 'DEVICE_STATUS'
-
 export const TEMPLATE_STATUS_DICT_CODE = 'TEMPLATE_STATUS'

@@ -18,6 +18,7 @@ import { useAuthStore } from '../stores/auth'
 import { useAppMenuStore } from '../stores/appMenu'
 import { getMessageList, getUnreadTotal, readAll, readBatch } from '../api/modules/message'
 import { useWebSocket } from '../composables/useWebSocket'
+import { formatDateTime } from '../utils/dateTime'
 import { collectMenuPathsFromTree } from '../utils/menuPaths'
 
 import brandLogo from '../assets/logo.png'
@@ -33,7 +34,8 @@ const noticeLoading = ref(false)
 const noticeUnreadTotal = ref(0)
 const noticeItems = ref([])
 const noticePageNumber = ref(1)
-const noticePageSize = ref(10)
+/** 消息中心弹层内每页条数：默认最新 3 条 */
+const noticePageSize = ref(3)
 const noticeTotal = ref(0)
 
 const iconMap = {
@@ -162,8 +164,13 @@ async function loadNotices(page = 1) {
 async function handleNoticeOpenChange(open) {
   noticePopoverOpen.value = open
   if (open) {
-    await Promise.all([refreshUnreadTotal(), loadNotices(noticePageNumber.value)])
+    noticePageNumber.value = 1
+    await Promise.all([refreshUnreadTotal(), loadNotices(1)])
   }
+}
+
+function onNoticePageChange(page) {
+  loadNotices(page)
 }
 
 async function handleNoticeReadAll() {
@@ -325,7 +332,7 @@ function logout() {
                                       {{ item.msgSceneName || item.msgType || '系统通知' }}
                                     </span>
                                     <span style="font-size: 12px; color: #86909c">
-                                      {{ item.sendTime }}
+                                      {{ formatDateTime(item.sendTime) }}
                                     </span>
                                   </div>
                                 </template>
@@ -359,6 +366,24 @@ function logout() {
                       </template>
                     </div>
                   </a-spin>
+                  <div
+                    v-if="noticeTotal > noticePageSize"
+                    style="
+                      padding: 8px 12px 12px;
+                      border-top: 1px solid #f0f0f0;
+                      display: flex;
+                      justify-content: center;
+                    "
+                  >
+                    <a-pagination
+                      :current="noticePageNumber"
+                      :page-size="noticePageSize"
+                      :total="noticeTotal"
+                      size="small"
+                      :show-size-changer="false"
+                      @change="onNoticePageChange"
+                    />
+                  </div>
                 </a-card>
               </template>
 

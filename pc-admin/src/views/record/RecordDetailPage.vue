@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { getRecordById } from '../../api/modules/inspection'
+import { formatDateTime } from '../../utils/dateTime'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,15 +19,24 @@ function getDeviceType(deviceCode) {
   return '-'
 }
 
+/** 展示用设备名称（保留 deviceCode 供内部匹配） */
+function deviceDisplayName(d) {
+  if (!d) return '—'
+  return d.deviceName || d.device || d.deviceCode || '—'
+}
+
 const deviceResults = computed(() => {
   const r = record.value
   if (!r) return []
   if (r.deviceResults?.length) return r.deviceResults
-  if (r.device) {
+  if (r.device || r.deviceCode || r.deviceName) {
+    const code = r.deviceCode ?? r.device
     return [
       {
-        device: r.device,
-        deviceType: getDeviceType(r.device),
+        device: r.deviceName || r.device || r.deviceCode,
+        deviceName: r.deviceName,
+        deviceCode: code,
+        deviceType: getDeviceType(code),
         result: r.result,
         items: r.items ?? [],
         photoUrls: r.photoUrls ?? [],
@@ -83,12 +93,21 @@ function goBack() {
     <a-card v-if="record" :bordered="false">
       <a-descriptions :column="1" bordered size="small" class="detail-section">
         <a-descriptions-item label="任务名称">{{ record.plan }}</a-descriptions-item>
-        <a-descriptions-item v-if="record.device" label="设备编码">{{ record.device }}</a-descriptions-item>
-        <a-descriptions-item v-else-if="deviceResults.length" label="设备">
-          {{ deviceResults.length > 5 ? `共 ${deviceResults.length} 台` : deviceResults.map((d) => d.device).join('、') }}
+        <a-descriptions-item v-if="deviceResults.length" label="设备名称">
+          {{
+            deviceResults.length > 5
+              ? `共 ${deviceResults.length} 台`
+              : deviceResults.map((d) => deviceDisplayName(d)).join('、')
+          }}
+        </a-descriptions-item>
+        <a-descriptions-item
+          v-else-if="record.deviceName || record.device || record.deviceCode"
+          label="设备名称"
+        >
+          {{ record.deviceName || record.device || record.deviceCode || '—' }}
         </a-descriptions-item>
         <a-descriptions-item label="巡检人">{{ record.inspector }}</a-descriptions-item>
-        <a-descriptions-item label="提交时间">{{ record.submitTime }}</a-descriptions-item>
+        <a-descriptions-item label="提交时间">{{ formatDateTime(record.submitTime) }}</a-descriptions-item>
         <a-descriptions-item label="巡检结果">{{ record.result }}</a-descriptions-item>
         <a-descriptions-item label="照片数量">{{ record.photos }}</a-descriptions-item>
       </a-descriptions>
@@ -110,7 +129,7 @@ function goBack() {
             <template #header>
               <span class="device-panel__header">
                 <a-tag :color="dr.result === '异常' ? 'error' : 'success'">{{ dr.result }}</a-tag>
-                <span class="device-panel__title">{{ dr.device }}</span>
+                <span class="device-panel__title">{{ deviceDisplayName(dr) }}</span>
                 <span class="device-panel__type">{{ dr.deviceType }}</span>
                 <span v-if="dr.photoUrls?.length" class="device-panel__meta">{{ dr.photoUrls.length }} 张照片</span>
               </span>

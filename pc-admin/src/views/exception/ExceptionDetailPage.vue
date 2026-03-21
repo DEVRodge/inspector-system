@@ -5,6 +5,7 @@ import { message } from 'ant-design-vue'
 import { getUsers } from '../../api/modules/user'
 import { uploadFile } from '../../api/modules/file'
 import { getFilePreviewUrl } from '../../utils/file'
+import { formatDateTime } from '../../utils/dateTime'
 import { useExceptionStore } from '../../stores/exception'
 
 const route = useRoute()
@@ -174,8 +175,8 @@ onMounted(async () => {
         <a-descriptions-item label="设备编码">{{ exception.device }}</a-descriptions-item>
         <a-descriptions-item label="设备名称">{{ exception.deviceName || '-' }}</a-descriptions-item>
         <a-descriptions-item label="异常描述">{{ exception.desc }}</a-descriptions-item>
-        <a-descriptions-item label="截止时间">{{ exception.deadline || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="创建时间">{{ exception.createTime || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="截止时间">{{ formatDateTime(exception.deadline) }}</a-descriptions-item>
+        <a-descriptions-item label="创建时间">{{ formatDateTime(exception.createTime) }}</a-descriptions-item>
         <a-descriptions-item label="处理人">
           {{ exception.handler || '未指派' }}
           <a-button
@@ -201,7 +202,7 @@ onMounted(async () => {
           </a-button>
         </a-descriptions-item>
         <a-descriptions-item label="处理结果">{{ exception.processResult || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="处理时间">{{ exception.processTime || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="处理时间">{{ formatDateTime(exception.processTime) }}</a-descriptions-item>
       </a-descriptions>
 
       <a-modal

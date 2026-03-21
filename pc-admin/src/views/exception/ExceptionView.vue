@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 import { EXCEPTION_STATUS_OPTIONS } from '../../api/modules/exception'
+import { formatDateTime } from '../../utils/dateTime'
 import { getUsers } from '../../api/modules/user'
 import { useExceptionStore } from '../../stores/exception'
 
@@ -190,14 +191,18 @@ onMounted(() => {
         <a-table-column title="设备编码" data-index="device" key="device" width="120" />
         <a-table-column title="设备名称" data-index="deviceName" key="deviceName" width="140" />
         <a-table-column title="异常描述" data-index="desc" key="desc" />
-        <a-table-column title="截止时间" data-index="deadline" key="deadline" width="170" />
+        <a-table-column title="截止时间" key="deadline" width="170">
+          <template #default="{ record }">{{ formatDateTime(record.deadline) }}</template>
+        </a-table-column>
         <a-table-column title="处理人" key="handler" width="110">
           <template #default="{ record }">
             {{ record.handler || '未指派' }}
           </template>
         </a-table-column>
         <a-table-column title="状态" data-index="statusDesc" key="statusDesc" width="110" />
-        <a-table-column title="创建时间" data-index="createTime" key="createTime" width="170" />
+        <a-table-column title="创建时间" key="createTime" width="170">
+          <template #default="{ record }">{{ formatDateTime(record.createTime) }}</template>
+        </a-table-column>
         <a-table-column title="操作" key="action" width="160">
           <template #default="{ record }">
             <a-button type="link" size="small" @click="viewDetail(record)">查看</a-button>

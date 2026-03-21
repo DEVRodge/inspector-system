@@ -1,11 +1,25 @@
 import { request } from '../http'
 
 /**
+ * 解包 GET /dictionary/list 常见响应（裸数组、data、records、list）
+ * @param {*} payload
+ * @returns {Array}
+ */
+export function unwrapDictionaryList(payload) {
+  if (payload == null) return []
+  if (Array.isArray(payload)) return payload
+  const inner =
+    payload?.data ?? payload?.records ?? payload?.list ?? payload?.rows ?? payload?.result
+  if (Array.isArray(inner)) return inner
+  return []
+}
+
+/**
  * 按字典类型编码查询列表（启用项，用于下拉等）
  * @param {string} code
  */
 export function getDictionaryList(code) {
-  return request({ url: '/dictionary/list', method: 'get', params: { code } })
+  return request({ url: '/dictionary/list', method: 'get', params: { code } }).then(unwrapDictionaryList)
 }
 
 /**

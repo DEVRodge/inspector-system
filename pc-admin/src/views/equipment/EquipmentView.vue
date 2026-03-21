@@ -14,8 +14,10 @@ import {
 } from '../../api/modules/equipment'
 import { getDictionaryList } from '../../api/modules/dictionary'
 import { getApiErrorMessage } from '../../utils/error'
-import { DEVICE_STATUS_DICT_CODE, DEVICE_TYPE_DICT_CODE } from '../../constants/dictionaries'
+import { DEVICE_TYPE_DICT_CODE } from '../../constants/dictionaries'
+import { DEVICE_STATUS_API_OPTIONS } from '../../constants/equipment'
 import { generateLabeledQrcodeDataUrl, triggerPngDownload } from '../../utils/deviceQrcodeCanvas'
+import { formatDate } from '../../utils/dateTime'
 
 const query = reactive({
   keyword: '',
@@ -119,29 +121,26 @@ function fillForm(record) {
 
 const teamOptions = ref([])
 const deviceTypeOptions = ref([])
-const deviceStatusOptions = ref([])
+/** 运行状态：接口固定枚举 RUNNING/MAINTENANCE/STOPPED，非字典 */
+const deviceStatusOptions = ref([...DEVICE_STATUS_API_OPTIONS])
+
+function mapDictToSelectOptions(arr) {
+  return (arr || [])
+    .filter((d) => d && d.enabled !== false)
+    .map((d) => {
+      const value = d.value ?? d.code ?? d.name
+      const label = d.name ?? d.label ?? String(value ?? '')
+      return { value, label }
+    })
+    .filter((o) => o.value !== undefined && o.value !== null && o.value !== '')
+}
 
 async function loadDeviceTypes() {
   try {
-    const list = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
-    const arr = Array.isArray(list) ? list : list?.list ?? []
-    deviceTypeOptions.value = (arr || [])
-      .filter((d) => d.enabled !== false)
-      .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
+    const arr = await getDictionaryList(DEVICE_TYPE_DICT_CODE)
+    deviceTypeOptions.value = mapDictToSelectOptions(arr)
   } catch {
     deviceTypeOptions.value = []
-  }
-}
-
-async function loadDeviceStatuses() {
-  try {
-    const list = await getDictionaryList(DEVICE_STATUS_DICT_CODE)
-    const arr = Array.isArray(list) ? list : list?.list ?? []
-    deviceStatusOptions.value = (arr || [])
-      .filter((d) => d.enabled !== false)
-      .map((d) => ({ value: d.value ?? d.name, label: d.name ?? d.value }))
-  } catch {
-    deviceStatusOptions.value = []
   }
 }
 
@@ -157,7 +156,6 @@ function getDeviceStatusLabel(val) {
 
 onMounted(() => {
   loadDeviceTypes()
-  loadDeviceStatuses()
   loadList()
 })
 
@@ -165,7 +163,7 @@ async function openCreate() {
   currentRow.value = null
   fillForm()
   formVisible.value = true
-  await Promise.all([loadDepartments(), loadDeviceTypes(), loadDeviceStatuses()])
+  await Promise.all([loadDepartments(), loadDeviceTypes()])
   if (!formState.status && deviceStatusOptions.value.length > 0) {
     formState.status = deviceStatusOptions.value[0].value
   }
@@ -193,7 +191,7 @@ function openDetail(record) {
 async function openEdit(record) {
   currentRow.value = record
   formVisible.value = true
-  await Promise.all([loadDepartments(), loadDeviceTypes(), loadDeviceStatuses()])
+  await Promise.all([loadDepartments(), loadDeviceTypes()])
   fillForm(record)
 }
 
@@ -450,7 +448,7 @@ async function handleImportFile(e) {
           <template #default="{ record }">{{ record.organizationName ?? record.team }}</template>
         </a-table-column>
         <a-table-column title="投运日期" key="date" width="120">
-          <template #default="{ record }">{{ record.commissionDate ?? record.date }}</template>
+          <template #default="{ record }">{{ formatDate(record.commissionDate ?? record.date) }}</template>
         </a-table-column>
         <a-table-column title="运行状态" key="status" width="110">
           <template #default="{ record }">{{ record.statusDesc ?? getDeviceStatusLabel(record.status) }}</template>
@@ -477,7 +475,7 @@ async function handleImportFile(e) {
         <a-descriptions-item label="电压等级">{{ currentRow.voltage }}</a-descriptions-item>
         <a-descriptions-item label="安装地点">{{ currentRow.location }}</a-descriptions-item>
         <a-descriptions-item label="责任部门">{{ currentRow.organizationName ?? currentRow.team }}</a-descriptions-item>
-        <a-descriptions-item label="投运日期">{{ currentRow.commissionDate ?? currentRow.date }}</a-descriptions-item>
+        <a-descriptions-item label="投运日期">{{ formatDate(currentRow.commissionDate ?? currentRow.date) }}</a-descriptions-item>
         <a-descriptions-item label="运行状态">{{ currentRow.statusDesc ?? getDeviceStatusLabel(currentRow.status) }}</a-descriptions-item>
       </a-descriptions>
     </a-drawer>

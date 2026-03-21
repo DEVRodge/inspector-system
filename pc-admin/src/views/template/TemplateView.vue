@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
-import dayjs from 'dayjs'
+import { formatDateTime } from '../../utils/dateTime'
 import { getDictionaryList } from '../../api/modules/dictionary'
 import { getApiErrorMessage } from '../../utils/error'
 import {
@@ -195,14 +195,6 @@ function getStatusLabel(val) {
   return statusLabelMap[val] ?? val
 }
 
-function formatCreateTime(value) {
-  if (value == null || value === '') return '-'
-  const n = Number(value)
-  if (Number.isFinite(n) && n > 0) return dayjs(n).format('YYYY-MM-DD HH:mm:ss')
-  const d = dayjs(value)
-  return d.isValid() ? d.format('YYYY-MM-DD HH:mm:ss') : String(value)
-}
-
 function flattenItems(arr) {
   if (!Array.isArray(arr)) return []
   return arr.flatMap((it) => {
@@ -262,7 +254,7 @@ function removeRow(record) {
           <template #default="{ record }">{{ getDeviceTypeLabel(record.deviceType) }}</template>
         </a-table-column>
         <a-table-column title="创建时间" data-index="createTime" key="createTime" width="170">
-          <template #default="{ record }">{{ formatCreateTime(record.createTime) }}</template>
+          <template #default="{ record }">{{ formatDateTime(record.createTime) }}</template>
         </a-table-column>
         <a-table-column title="版本" data-index="version" key="version" width="90" />
         <a-table-column title="状态" data-index="status" key="status" width="100">

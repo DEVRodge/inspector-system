@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
+import { formatDateTime } from '../../utils/dateTime'
 import { message, Modal } from 'ant-design-vue'
 import {
   getDictionaryPage,
@@ -119,14 +120,6 @@ function getBizTypeLabel(value) {
 
 function getOperationLabel(value) {
   return LOG_OPERATION_OPTIONS.find((it) => it.value === value)?.label ?? value ?? '-'
-}
-
-function formatDateTime(value) {
-  if (value == null || value === '') return '-'
-  const n = Number(value)
-  if (Number.isFinite(n) && n > 0) return dayjs(n).format('YYYY-MM-DD HH:mm:ss')
-  const d = dayjs(value)
-  return d.isValid() ? d.format('YYYY-MM-DD HH:mm:ss') : String(value)
 }
 
 function normalizeIdList(value) {
@@ -1294,7 +1287,7 @@ function onLogTableChange(pag) {
         <a-descriptions-item label="角色">{{ currentMember.roles || '-' }}</a-descriptions-item>
         <a-descriptions-item label="状态">{{ currentMember.status }}</a-descriptions-item>
         <a-descriptions-item label="备注">{{ currentMember.remark || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="创建时间">{{ currentMember.createTime || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="创建时间">{{ formatDateTime(currentMember.createTime) }}</a-descriptions-item>
         <a-descriptions-item label="最近登录">{{ currentMember.lastLoginTime || '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-drawer>

@@ -23,7 +23,7 @@
 
 ### 2.1 设备 (Device)
 
-**Apifox DeviceVO / DeviceModifyParam 对齐**：type 为字典 value（枚举），status 为 RUNNING | MAINTENANCE | STOPPED。
+**Apifox DeviceVO / DeviceModifyParam 对齐**：`type` 为数据字典项的 value（见 `/dictionary/list?code=device_type`）；`status` 为接口固定三枚举 **RUNNING | MAINTENANCE | STOPPED**（非字典维护），前端下拉写死于 `constants/equipment.js`。
 
 | 前端展示/表单 | 后端字段 | 说明 |
 |---------------|----------|------|

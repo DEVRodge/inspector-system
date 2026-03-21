@@ -57,6 +57,23 @@ function openDetail(record) {
   router.push({ name: 'recordDetail', params: { id: record.key ?? record.id } })
 }
 
+/** 列表「设备」列：优先设备名称，与接口 devices[].deviceName 对齐 */
+function formatRecordDeviceColumn(record) {
+  const labelFromDeviceRow = (d) =>
+    d?.deviceName || d?.deviceCode || d?.device || ''
+  if (record.devices?.length) {
+    const first = labelFromDeviceRow(record.devices[0])
+    return record.devices.length > 1 ? `${first || '—'} 等 ${record.devices.length} 台` : first || '—'
+  }
+  if (record.deviceResults?.length) {
+    const first = labelFromDeviceRow(record.deviceResults[0])
+    return record.deviceResults.length > 1
+      ? `${first || '—'} 等 ${record.deviceResults.length} 台`
+      : first || '—'
+  }
+  return record.deviceName || record.device || record.deviceCode || '—'
+}
+
 onMounted(() => loadList())
 </script>
 
@@ -76,7 +93,7 @@ onMounted(() => loadList())
       <div class="table-toolbar">
         <div class="table-toolbar__left" style="flex: 1">
           <a-input v-model:value="query.plan" placeholder="任务名称" allow-clear />
-          <a-input v-model:value="query.device" placeholder="设备编码" allow-clear />
+          <a-input v-model:value="query.device" placeholder="设备编码或名称" allow-clear />
           <a-input v-model:value="query.inspector" placeholder="巡检人" allow-clear />
           <a-select v-model:value="query.result" placeholder="结果状态" allow-clear style="width: 160px">
             <a-select-option value="正常">正常</a-select-option>
@@ -95,14 +112,9 @@ onMounted(() => loadList())
         @change="onTableChange"
       >
         <a-table-column title="任务名称" data-index="plan" key="plan" width="140" />
-        <a-table-column title="设备编码" key="device" width="160">
+        <a-table-column title="设备名称" key="device" width="200">
           <template #default="{ record }">
-            <template v-if="record.deviceResults?.length">
-              {{ record.deviceResults[0].device }} 等 {{ record.deviceResults.length }} 台
-            </template>
-            <template v-else>
-              {{ record.device }}
-            </template>
+            {{ formatRecordDeviceColumn(record) }}
           </template>
         </a-table-column>
         <a-table-column title="巡检人" data-index="inspector" key="inspector" width="100" />

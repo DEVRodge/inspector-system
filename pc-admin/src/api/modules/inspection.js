@@ -5,6 +5,7 @@
 import { request } from '../http'
 import { getFilePreviewUrl } from '@/utils/file'
 import { formToCron } from '@/utils/cron'
+import { formatDateTime } from '@/utils/dateTime'
 
 function toKey(item) {
   if (!item) return item
@@ -229,38 +230,156 @@ export function deleteTask(id) {
 }
 
 // ---------- 巡检记录 ----------
+// Apifox：taskName / ownerName / executeTime|createTime / result+resultDesc；与前端 plan、inspector、submitTime 对齐
+
+/** 解包分页：兼容 { records, total } 与 { data: { records, total } } */
+function unwrapInspectionRecordPagePayload(payload) {
+  const p =
+    payload?.data != null && typeof payload.data === 'object' && !Array.isArray(payload.data)
+      ? payload.data
+      : payload
+  const raw = p?.records ?? p?.list ?? []
+  const total = p?.total ?? 0
+  return { raw: Array.isArray(raw) ? raw : [], total: Number(total) || 0 }
+}
+
+/** 详情单条：兼容外层 data 包装 */
+function unwrapInspectionRecordDetailPayload(payload) {
+  if (payload == null) return null
+  if (payload.data != null && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+    return payload.data
+  }
+  return payload
+}
+
+function countFilesInDevices(devices) {
+  if (!Array.isArray(devices)) return 0
+  return devices.reduce((n, d) => n + (Array.isArray(d?.files) ? d.files.length : 0), 0)
+}
+
+/** 巡检结果：优先中文描述，其次枚举转中文 */
+function mapInspectionResultLabel(result, resultDesc) {
+  if (resultDesc != null && String(resultDesc).trim() !== '') return String(resultDesc)
+  const r = String(result ?? '')
+    .trim()
+    .toUpperCase()
+  if (r === 'NORMAL') return '正常'
+  if (r === 'ABNORMAL') return '异常'
+  return result ?? '—'
+}
+
+function formatInspectionItemValue(val) {
+  if (val === 'NORMAL' || val === 'normal') return '正常'
+  if (val === 'ABNORMAL' || val === 'abnormal') return '异常'
+  return val
+}
+
+/**
+ * 将接口树形 items（含 children）扁平为 { name, value }[] 供表格展示
+ * @param {unknown} items
+ * @returns {Array<{ name: string, value: unknown }>}
+ */
+function flattenInspectionRecordItems(items) {
+  if (!Array.isArray(items) || items.length === 0) return []
+  const allLeaves = items.every((i) => !i?.children?.length && (i?.name != null || i?.value != null))
+  if (allLeaves) {
+    return items.map((i) => ({
+      name: i.name ?? '',
+      value: formatInspectionItemValue(i.value),
+    }))
+  }
+  const rows = []
+  for (const node of items) {
+    if (node?.children?.length) {
+      rows.push(...flattenInspectionRecordItems(node.children))
+    } else if (node?.name != null || node?.value != null) {
+      rows.push({
+        name: node.name ?? '',
+        value: formatInspectionItemValue(node.value),
+      })
+    }
+  }
+  return rows
+}
+
+/** 列表行 / 详情根对象字段对齐 */
+function normalizeInspectionRecordRoot(raw) {
+  if (!raw) return raw
+  const r = toKey(raw)
+  const devices = r.devices ?? []
+  const photoCount =
+    r.photos ??
+    r.photoCount ??
+    r.fileCount ??
+    (typeof r.attachmentsCount === 'number' ? r.attachmentsCount : countFilesInDevices(devices))
+  const rawSubmitTime = r.submitTime ?? r.executeTime ?? r.finishTime ?? r.createTime
+  return {
+    ...r,
+    plan: r.plan ?? r.taskName ?? r.taskInfo?.name ?? '',
+    inspector: r.inspector ?? r.ownerName ?? r.submitterName ?? r.submitUserName ?? r.userName ?? '',
+    submitTime:
+      rawSubmitTime != null && rawSubmitTime !== ''
+        ? formatDateTime(rawSubmitTime)
+        : '—',
+    result: mapInspectionResultLabel(r.result, r.resultDesc),
+    photos: typeof photoCount === 'number' ? photoCount : countFilesInDevices(devices),
+  }
+}
+
+function mapRecordResultQueryForApi(result) {
+  if (result === '正常') return 'NORMAL'
+  if (result === '异常') return 'ABNORMAL'
+  return result || undefined
+}
 
 export function getRecordPage(params = {}) {
+  const q = {
+    pageNumber: params.pageNumber ?? 1,
+    pageSize: params.pageSize ?? 20,
+    /** Apifox：keyword；部分网关仍用 plan */
+    plan: params.plan || undefined,
+    keyword: params.keyword || params.plan || undefined,
+    device: params.device || undefined,
+    inspector: params.inspector || undefined,
+    result: mapRecordResultQueryForApi(params.result),
+    startTime: params.startTime,
+    endTime: params.endTime,
+  }
+  if (params.startTime) q['period.begin'] = params.startTime
+  if (params.endTime) q['period.end'] = params.endTime
   return request({
     url: '/inspection/record/page',
     method: 'get',
-    params: {
-      pageNumber: params.pageNumber ?? 1,
-      pageSize: params.pageSize ?? 20,
-      plan: params.plan || undefined,
-      device: params.device || undefined,
-      inspector: params.inspector || undefined,
-      result: params.result,
-      startTime: params.startTime,
-      endTime: params.endTime,
-    },
+    params: q,
   }).then((data) => {
-    const raw = data?.records ?? data?.list ?? []
-    const total = data?.total ?? 0
-    return { list: raw.map(toKey), total }
+    const { raw, total } = unwrapInspectionRecordPagePayload(data)
+    return { list: raw.map((row) => normalizeInspectionRecordRoot(row)), total }
   })
 }
 
 export function getRecordById(id) {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
   return request({ url: `/inspection/record/${id}`, method: 'get' }).then((data) => {
-    if (!data) return null
-    const mapped = toKey(data)
+    const body = unwrapInspectionRecordDetailPayload(data)
+    if (!body) return null
+    const mapped = normalizeInspectionRecordRoot(body)
     if (mapped.devices?.length) {
       mapped.deviceResults = mapped.devices.map((d) => {
         const files = d.files ?? []
         const photoUrls = files.map((f) => getFilePreviewUrl(f, baseUrl)).filter(Boolean)
-        return { ...d, device: d.deviceCode ?? d.device, photoUrls }
+        const deviceCode = d.deviceCode ?? d.device
+        const deviceName = d.deviceName
+        const itemsFlat = flattenInspectionRecordItems(d.items ?? [])
+        const resultLabel = mapInspectionResultLabel(d.result, d.resultDesc)
+        return {
+          ...d,
+          deviceCode,
+          deviceName,
+          device: deviceName || deviceCode || '',
+          result: resultLabel,
+          items: itemsFlat,
+          photoUrls,
+        }
       })
     } else if (mapped.files?.length) {
       mapped.photoUrls = mapped.files.map((f) => getFilePreviewUrl(f, baseUrl)).filter(Boolean)

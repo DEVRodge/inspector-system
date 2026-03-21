@@ -8,6 +8,7 @@ import { useTaskStore } from '@/stores/task'
 import { getOrganizationById, getOrganizationsList } from '@/api/modules/organization'
 import { getUserById } from '@/api/modules/user'
 import { getDeviceById } from '@/api/modules/equipment'
+import { formatDateTime } from '@/utils/dateTime'
 
 const router = useRouter()
 const taskStore = useTaskStore()
@@ -104,7 +105,11 @@ function formatPeriodTime(record) {
     if (parsed) rec = { ...record, ...parsed }
   }
   const recCycle = (rec.cycle ?? '').toLowerCase()
-  if (recCycle === 'once') return rec.executeAt ?? '-'
+  if (recCycle === 'once') {
+    const at = rec.executeAt
+    if (at == null || at === '') return '-'
+    return formatDateTime(at)
+  }
   if (recCycle === 'weekly' && rec.cycleExtra?.weekday != null) {
     const weekday = WEEKDAYS.find((item) => item.value === rec.cycleExtra.weekday)
     return `${weekday?.label ?? ''} ${rec.time ?? ''}`.trim()
