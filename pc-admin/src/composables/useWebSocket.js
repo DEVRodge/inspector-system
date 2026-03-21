@@ -16,7 +16,8 @@ function resolveWsBaseUrl() {
     return `${proto}//${window.location.host}${raw}`
   }
   if (raw) return raw
-  if (import.meta.env.DEV && typeof window !== 'undefined') {
+  // 打包后 import.meta.env.DEV 为 false，若未配置 VITE_WS_URL 会永远连不上；与开发环境一致默认走同源 /api
+  if (typeof window !== 'undefined') {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     return `${proto}//${window.location.host}/api/websocket/msg`
   }
@@ -36,9 +37,7 @@ export function useWebSocket(onMessage) {
   function connect() {
     const baseUrl = resolveWsBaseUrl()
     if (!baseUrl) {
-      if (import.meta.env.DEV) {
-        console.warn('[WebSocket] 未配置 VITE_WS_URL，跳过连接')
-      }
+      console.warn('[WebSocket] 无法解析连接地址，跳过连接')
       return
     }
 
@@ -60,9 +59,7 @@ export function useWebSocket(onMessage) {
       wsRef.value = ws
 
       ws.onopen = () => {
-        if (import.meta.env.DEV) {
-          console.info('[WebSocket] 已连接', baseUrl.replace(/\?.*$/, ''))
-        }
+        console.info('[WebSocket] 已连接', baseUrl.replace(/\?.*$/, ''))
         if (reconnectTimer.value) {
           clearTimeout(reconnectTimer.value)
           reconnectTimer.value = null
@@ -92,9 +89,7 @@ export function useWebSocket(onMessage) {
       }
 
       ws.onerror = () => {
-        if (import.meta.env.DEV) {
-          console.warn('[WebSocket] 连接错误', baseUrl.replace(/\?.*$/, ''))
-        }
+        console.warn('[WebSocket] 连接错误', baseUrl.replace(/\?.*$/, ''))
         ws.close()
       }
     } catch (e) {

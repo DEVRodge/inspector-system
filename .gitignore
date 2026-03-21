@@ -3,3 +3,7 @@
 .env.example
 .env.*
 !pc-admin/.env.development
+!pc-admin/.env.production
+
+# pc-admin 生产构建输出（仓库根目录）
+/dist

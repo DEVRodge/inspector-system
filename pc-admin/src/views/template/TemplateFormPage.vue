@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { getDictionaryList } from '../../api/modules/dictionary'
 import { getApiErrorMessage } from '../../utils/error'
-import { DEVICE_TYPE_DICT_CODE, TEMPLATE_STATUS_DICT_CODE } from '../../constants/dictionaries'
+import { DEVICE_TYPE_DICT_CODE } from '../../constants/dictionaries'
+import { TEMPLATE_STATUS_OPTIONS } from '../../constants/templateForm'
 import { useTemplateStore } from '../../stores/template'
 
 const route = useRoute()
@@ -13,7 +14,8 @@ const templateStore = useTemplateStore()
 
 const isEdit = computed(() => Boolean(route.params.id))
 const deviceTypeOptions = ref([])
-const templateStatusOptions = ref([])
+/** 模板状态为接口固定枚举 DRAFT | ENABLED，见 templateForm.js */
+const templateStatusOptions = TEMPLATE_STATUS_OPTIONS
 
 async function loadDeviceTypes() {
   try {
@@ -24,18 +26,6 @@ async function loadDeviceTypes() {
       .map((d) => ({ value: d.value ?? d.code ?? d.name, label: d.name ?? d.label ?? d.value }))
   } catch {
     deviceTypeOptions.value = []
-  }
-}
-
-async function loadTemplateStatuses() {
-  try {
-    const list = await getDictionaryList(TEMPLATE_STATUS_DICT_CODE)
-    const arr = Array.isArray(list) ? list : list?.list ?? []
-    templateStatusOptions.value = (arr || [])
-      .filter((d) => d.enabled !== false)
-      .map((d) => ({ value: d.value ?? d.name, label: d.name ?? d.value }))
-  } catch {
-    templateStatusOptions.value = []
   }
 }
 
@@ -68,7 +58,7 @@ function fillForm(record) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadDeviceTypes(), loadTemplateStatuses()])
+  await loadDeviceTypes()
   if (isEdit.value && route.params.id) {
     const record = await templateStore.getById(route.params.id)
     if (record) fillForm(record)

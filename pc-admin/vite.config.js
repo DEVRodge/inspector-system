@@ -41,6 +41,9 @@ export default defineConfig({
     }),
   ],
   build: {
+    // 产物输出到仓库根目录 /dist，便于部署整仓时直接指向该目录
+    outDir: path.resolve(__dirname, '../dist'),
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         manualChunks: (id) => {

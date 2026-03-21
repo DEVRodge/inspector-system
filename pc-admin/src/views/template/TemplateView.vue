@@ -13,7 +13,7 @@ import {
   updateTemplateItem,
 } from '../../api/modules/inspection'
 import { DEVICE_TYPE_DICT_CODE } from '../../constants/dictionaries'
-import { INSPECTION_ITEM_TYPES } from '../../constants/templateForm'
+import { getTemplateStatusLabel, INSPECTION_ITEM_TYPES } from '../../constants/templateForm'
 import { useTemplateStore } from '../../stores/template'
 import InspectionItemTreeModal from '../../components/template/InspectionItemTreeModal.vue'
 
@@ -190,9 +190,8 @@ function getDeviceTypeLabel(val) {
   return deviceTypeOptions.value.find((d) => d.value === val)?.label ?? val
 }
 
-const statusLabelMap = { DRAFT: '草稿', ENABLED: '启用中' }
 function getStatusLabel(val) {
-  return statusLabelMap[val] ?? val
+  return getTemplateStatusLabel(val)
 }
 
 function flattenItems(arr) {

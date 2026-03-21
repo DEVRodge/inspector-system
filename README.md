@@ -30,7 +30,7 @@ npm run dev
 
 - **前端**：页面与交互在 pc-admin 内完成；接口由后端提供，按文档对接。
 - **设备二维码**：在设备台账中生成，图为前端绘制与下载，无单独二维码后端接口。
-- **数据字典**：下拉选项优先使用字典接口返回数据。例外：**设备运行状态**按 Apifox 为固定枚举 `RUNNING` / `MAINTENANCE` / `STOPPED`，见 `pc-admin/src/constants/equipment.js`。
+- **数据字典**：下拉选项优先使用字典接口返回数据。例外：**设备运行状态**为固定枚举 `RUNNING` / `MAINTENANCE` / `STOPPED`（`pc-admin/src/constants/equipment.js`）；**巡检模板状态**为接口枚举 `DRAFT` / `ENABLED`（`pc-admin/src/constants/templateForm.js`），不走字典。
 
 ### 可补充内容
 
