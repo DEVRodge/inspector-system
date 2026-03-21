@@ -115,7 +115,6 @@ onMounted(() => {
           <div class="dashboard-hero__meta">
             <div class="dashboard-hero__eyebrow">GOKIN SOLAR · PC 管理端</div>
             <h2>设备巡检数字化工作台</h2>
-            <p>工作台数据严格对齐接口：设备、任务完成率与异常统计均来自真实接口。</p>
           </div>
         </div>
       </div>
