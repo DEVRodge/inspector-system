@@ -17,6 +17,11 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      // MinIO 静态资源与 /api 平级：http://host:3000/minio/...
+      '/minio': {
+        target: 'http://1.14.47.50:3000',
+        changeOrigin: true,
+      },
     },
   },
   resolve: {

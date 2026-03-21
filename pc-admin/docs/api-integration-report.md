@@ -181,7 +181,7 @@
 | `GET /file/{id}` | 文件元信息 |
 | `GET /public/file/{id}` | 公开获取（无需鉴权） |
 
-**FileVO**：id, name, path, accessPrefix。预览 URL：path 若已是 http(s) 则直接用；否则 `accessPrefix + path`；兜底 `/api/public/file/{id}`。
+**FileVO**：**预览优先 `path`**（如 `/minio/inspector-file/...`），不拼 `/api`；`endpointPath` 仅在内网、无 path/无 id 兜底时用。旧数据 `accessPrefix + 相对 path`；再兜底 `public/file/{id}`。可选 `VITE_FILE_PUBLIC_ORIGIN`。
 
 ---
 
