@@ -16,6 +16,8 @@ dist-ssr
 .env
 .env.example
 .env.*
+# 开发环境默认配置可随仓库共享（勿在此存放生产密钥）
+!.env.development
 
 # Editor directories and files
 .vscode/*
