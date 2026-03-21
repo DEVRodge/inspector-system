@@ -11,14 +11,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   server: {
     proxy: {
+      // 后端基址为 http://1.14.47.50:3000/api：原样转发 /api/**，不再 strip 前缀
       '/api': {
-        target: 'http://1.14.47.50:4009',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
-      // WebSocket 与 HTTP 同源走代理，避免浏览器直连云主机端口被拦
-      '/websocket': {
-        target: 'http://1.14.47.50:4009',
+        target: 'http://1.14.47.50:3000',
         changeOrigin: true,
         ws: true,
       },

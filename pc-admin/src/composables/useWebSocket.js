@@ -1,6 +1,6 @@
 /**
  * WebSocket 消息推送连接
- * - VITE_WS_URL：完整地址如 wss://api.example.com/websocket/msg；或相对路径如 /websocket/msg（与当前页面同源，开发时走 Vite 代理）
+ * - VITE_WS_URL：完整 wss 地址；或相对路径如 /api/websocket/msg（与 HTTP 同源前缀，开发时走 Vite /api 代理）
  */
 import { onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -18,7 +18,7 @@ function resolveWsBaseUrl() {
   if (raw) return raw
   if (import.meta.env.DEV && typeof window !== 'undefined') {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${proto}//${window.location.host}/websocket/msg`
+    return `${proto}//${window.location.host}/api/websocket/msg`
   }
   return ''
 }
