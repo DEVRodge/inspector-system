@@ -16,6 +16,9 @@ function normalizeHighRiskDevicesList(inner) {
       key: String(item?.deviceId ?? item?.deviceCodeOrName ?? `device-${index}`),
       deviceId: item?.deviceId != null ? String(item.deviceId) : '',
       deviceCodeOrName: item?.deviceCodeOrName ?? '-',
+      /** 展示用名称：优先接口 deviceName；无则由报表页按 deviceId 拉取设备台账补全 */
+      deviceDisplayName:
+        item?.deviceName ?? item?.device_name ?? item?.name ?? '',
       inspectionOccurrenceCount: toNumber(item?.inspectionOccurrenceCount),
       exceptionOccurrenceCount: toNumber(item?.exceptionOccurrenceCount),
       slotCompletionRatePercent: toNumber(item?.slotCompletionRatePercent),
@@ -29,6 +32,7 @@ function normalizeHighRiskDevicesList(inner) {
       key,
       deviceId: item?.key != null ? String(item.key) : '',
       deviceCodeOrName: item?.device ?? '-',
+      deviceDisplayName: '',
       inspectionOccurrenceCount: toNumber(item?.inspections),
       exceptionOccurrenceCount: toNumber(item?.exceptions),
       slotCompletionRatePercent: toNumber(item?.completionRate),

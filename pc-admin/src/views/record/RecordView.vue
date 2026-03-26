@@ -3,10 +3,13 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { getRecordPage } from '../../api/modules/inspection'
+import { getUsers } from '../../api/modules/user'
 
 const router = useRouter()
 const rows = ref([])
 const loading = ref(false)
+const ownerOptions = ref([])
+const ownerLoading = ref(false)
 const pagination = reactive({
   current: 1,
   pageSize: 20,
@@ -15,25 +18,44 @@ const pagination = reactive({
 
 const query = reactive({
   plan: '',
-  device: '',
-  inspector: '',
+  ownerId: undefined,
   result: undefined,
-  timeRange: null,
+  /** 按完成日期（单日），未选则不按日期过滤 */
+  completeDate: null,
 })
+
+async function loadOwnerOptions() {
+  ownerLoading.value = true
+  try {
+    const res = await getUsers({ pageNumber: 1, pageSize: 500, enabled: true })
+    const arr = res?.records ?? res?.list ?? (Array.isArray(res) ? res : [])
+    ownerOptions.value = arr.map((u) => ({
+      value: String(u.id ?? ''),
+      label: u.name ?? u.username ?? String(u.id ?? ''),
+    }))
+  } catch {
+    ownerOptions.value = []
+    message.error('加载责任人列表失败')
+  } finally {
+    ownerLoading.value = false
+  }
+}
 
 async function loadList() {
   loading.value = true
   try {
-    const [start, end] = query.timeRange || []
+    const day = query.completeDate
+    const dayStr = day?.format?.('YYYY-MM-DD') ?? day
+    const oid = query.ownerId
     const res = await getRecordPage({
       pageNumber: pagination.current,
       pageSize: pagination.pageSize,
       plan: query.plan || undefined,
-      device: query.device || undefined,
-      inspector: query.inspector || undefined,
+      ownerId: oid != null && oid !== '' ? oid : undefined,
       result: query.result,
-      startTime: start?.format?.('YYYY-MM-DD') ?? start,
-      endTime: end?.format?.('YYYY-MM-DD') ?? end,
+      /** 由 getRecordPage 组装为 period=当日 00:00:00,当日 23:59:59 */
+      completeTimeBegin: dayStr || undefined,
+      completeTimeEnd: dayStr || undefined,
     })
     rows.value = res?.list ?? []
     pagination.total = res?.total ?? 0
@@ -57,7 +79,10 @@ function openDetail(record) {
   router.push({ name: 'recordDetail', params: { id: record.key ?? record.id } })
 }
 
-onMounted(() => loadList())
+onMounted(async () => {
+  await loadOwnerOptions()
+  loadList()
+})
 </script>
 
 <template>
@@ -76,13 +101,27 @@ onMounted(() => loadList())
       <div class="table-toolbar">
         <div class="table-toolbar__left" style="flex: 1">
           <a-input v-model:value="query.plan" placeholder="任务名称" allow-clear />
-          <a-input v-model:value="query.device" placeholder="设备编码或名称" allow-clear />
-          <a-input v-model:value="query.inspector" placeholder="巡检人" allow-clear />
+          <a-select
+            v-model:value="query.ownerId"
+            placeholder="巡检人（责任人）"
+            allow-clear
+            show-search
+            :loading="ownerLoading"
+            :options="ownerOptions"
+            option-filter-prop="label"
+            style="width: 200px"
+          />
           <a-select v-model:value="query.result" placeholder="结果状态" allow-clear style="width: 160px">
             <a-select-option value="正常">正常</a-select-option>
             <a-select-option value="异常">异常</a-select-option>
           </a-select>
-          <a-range-picker v-model:value="query.timeRange" style="width: 280px" />
+          <a-date-picker
+            v-model:value="query.completeDate"
+            value-format="YYYY-MM-DD"
+            placeholder="完成日期"
+            allow-clear
+            style="width: 160px"
+          />
           <a-button type="primary" @click="() => { pagination.current = 1; loadList() }">查询</a-button>
         </div>
       </div>

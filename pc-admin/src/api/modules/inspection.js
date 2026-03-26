@@ -356,21 +356,42 @@ function mapRecordResultQueryForApi(result) {
   return result || undefined
 }
 
+/**
+ * 巡检记录分页时间：后端要求 period=开始,结束，形如 2026-01-01 00:00:00,2026-01-01 23:59:59（GET 序列化后空格为 +）
+ * 也可由调用方直接传入完整 period 字符串。
+ */
+function buildRecordPagePeriodParam(params = {}) {
+  if (params.period != null && String(params.period).trim() !== '') {
+    return String(params.period).trim()
+  }
+  const completeBegin =
+    params.completeTimeBegin ?? params.startTime ?? params.periodBegin
+  const completeEnd = params.completeTimeEnd ?? params.endTime ?? params.periodEnd
+  if (!completeBegin && !completeEnd) return undefined
+  const datePart = (s) => {
+    if (s == null || s === '') return ''
+    const str = String(s).trim()
+    return str.length >= 10 ? str.slice(0, 10) : str
+  }
+  const ds = datePart(completeBegin) || datePart(completeEnd)
+  const de = datePart(completeEnd) || datePart(completeBegin)
+  if (!ds || !de) return undefined
+  return `${ds} 00:00:00,${de} 23:59:59`
+}
+
 export function getRecordPage(params = {}) {
+  const ownerId = params.ownerId
+  const period = buildRecordPagePeriodParam(params)
   const q = {
     pageNumber: params.pageNumber ?? 1,
     pageSize: params.pageSize ?? 20,
     /** Apifox：keyword；部分网关仍用 plan */
     plan: params.plan || undefined,
     keyword: params.keyword || params.plan || undefined,
-    device: params.device || undefined,
-    inspector: params.inspector || undefined,
+    ownerId: ownerId != null && ownerId !== '' ? ownerId : undefined,
     result: mapRecordResultQueryForApi(params.result),
-    startTime: params.startTime,
-    endTime: params.endTime,
   }
-  if (params.startTime) q['period.begin'] = params.startTime
-  if (params.endTime) q['period.end'] = params.endTime
+  if (period) q.period = period
   return request({
     url: '/inspection/record/page',
     method: 'get',

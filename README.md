@@ -32,6 +32,12 @@ npm run dev
 - **设备二维码**：在设备台账中生成，图为前端绘制与下载，无单独二维码后端接口。
 - **数据字典**：下拉选项优先使用字典接口返回数据。例外：**设备运行状态**为固定枚举 `RUNNING` / `MAINTENANCE` / `STOPPED`（`pc-admin/src/constants/equipment.js`）；**巡检模板状态**为接口枚举 `DRAFT` / `ENABLED`（`pc-admin/src/constants/templateForm.js`），不走字典。
 
+### 用户操作手册（给最终使用者）
+
+- **HTML 版（图文并茂，可打印为 PDF）**：[docs/光伏厂区设备巡检系统-用户操作手册.html](docs/光伏厂区设备巡检系统-用户操作手册.html)  
+- **封面配图**：[docs/manual-cover.png](docs/manual-cover.png)  
+- **如何导出 PDF**：[docs/导出操作手册为PDF.md](docs/导出操作手册为PDF.md)（推荐 Chrome / Edge 打开 HTML → 打印 → 另存为 PDF，并勾选「背景图形」）
+
 ### 可补充内容
 
 - 部署与 CI/CD 说明

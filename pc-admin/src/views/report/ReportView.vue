@@ -5,6 +5,7 @@ import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import dayjs from 'dayjs'
 import { getReportData } from '../../api/modules/report'
+import { getDeviceById } from '../../api/modules/equipment'
 
 const BaseChart = defineAsyncComponent(() => import('../../components/charts/BaseChart.vue'))
 
@@ -38,7 +39,7 @@ const report = ref({
 })
 
 const riskDeviceColumns = [
-  { title: '设备', dataIndex: 'deviceCodeOrName', key: 'deviceCodeOrName' },
+  { title: '设备', dataIndex: 'deviceDisplayName', key: 'deviceDisplayName' },
   { title: '巡检次数', dataIndex: 'inspectionOccurrenceCount', key: 'inspectionOccurrenceCount', width: 120 },
   { title: '异常次数', dataIndex: 'exceptionOccurrenceCount', key: 'exceptionOccurrenceCount', width: 120 },
   { title: '完成率', dataIndex: 'slotCompletionRatePercent', key: 'slotCompletionRatePercent', width: 110 },
@@ -140,6 +141,30 @@ const periodTitleMap = {
   year: '年度统计报表',
 }
 
+/** 高风险列表接口的 deviceCodeOrName 常为编码；按 deviceId 拉取台账名称用于展示 */
+async function enrichHighRiskDeviceNames() {
+  const rows = report.value.highRiskDevices
+  if (!rows?.length) return
+  const ids = [...new Set(rows.map((r) => r.deviceId).filter(Boolean))]
+  if (!ids.length) return
+  const entries = await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const d = await getDeviceById(id)
+        return [id, d?.name ?? '']
+      } catch {
+        return [id, '']
+      }
+    }),
+  )
+  const idToName = Object.fromEntries(entries)
+  for (const row of rows) {
+    const n = idToName[row.deviceId]
+    if (n) row.deviceDisplayName = n
+    else if (!row.deviceDisplayName) row.deviceDisplayName = row.deviceCodeOrName ?? '-'
+  }
+}
+
 /** 用 Canvas 绘制中文标题，避免 jsPDF 默认字体不支持中文乱码 */
 function drawTitleImage(reportTitle, exportTime, widthMm = 210) {
   const dpr = 2
@@ -210,6 +235,7 @@ async function loadReport() {
   loading.value = true
   try {
     report.value = await getReportData({ period: activePeriod.value })
+    await enrichHighRiskDeviceNames()
   } catch (error) {
     message.error('报表数据加载失败，请稍后重试。')
   } finally {

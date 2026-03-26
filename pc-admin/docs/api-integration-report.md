@@ -113,7 +113,7 @@
 | photoUrls | photoUrls | 照片 URL 列表 |
 
 **接口**：
-- `GET /inspection/record/page` - 分页参数：pageNumber, pageSize, plan, device, inspector, result, startTime, endTime
+- `GET /inspection/record/page` - 分页参数：pageNumber, pageSize、keyword（任务名称等）、ownerId（责任人用户 id）、result、`period`（单参数：`开始日期时间,结束日期时间`，如 `2026-01-01 00:00:00,2026-01-01 23:59:59`，GET 中空格常编码为 `+`）
 - `GET /inspection/record/{id}` - 详情
 - `GET /inspection/record/device?recordId=xxx&deviceCode=xxx` - 单设备巡检结果
 
