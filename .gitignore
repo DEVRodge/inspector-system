@@ -7,3 +7,18 @@
 
 # pc-admin 生产构建输出（仓库根目录）
 /dist
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# 本地打包 / 临时压缩包（勿提交）
+dist.zip
+
+# 前端测试截图与 Playwright 等本地产物
+pc-admin/test-artifacts/
+pc-admin/test-results/
+
+# 仅本机使用的 Cursor 技能扩展（未纳入仓库协作范围）
+.cursor/skills/code-change-butterfly-audit/
+.cursor/skills/frontend-testing-validation/
