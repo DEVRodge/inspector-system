@@ -1,4 +1,5 @@
 import { request } from '../http'
+import { assertBusinessOk } from '../businessResult'
 
 const DEFAULT_CHANNEL = 'CHANNEL_SITE'
 
@@ -35,7 +36,7 @@ export function readAll(channelType = DEFAULT_CHANNEL) {
   return request({
     url: `/msg-record/read-all/${channelType}`,
     method: 'put',
-  })
+  }).then(assertBusinessOk)
 }
 
 export function readBatch(ids) {
@@ -47,5 +48,5 @@ export function readBatch(ids) {
     url: '/msg-record/read-batch',
     method: 'put',
     data: ids.map((id) => String(id)).filter(Boolean),
-  })
+  }).then(assertBusinessOk)
 }

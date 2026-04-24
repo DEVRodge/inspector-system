@@ -1,4 +1,5 @@
 import { request } from '../http'
+import { assertBusinessOk } from '../businessResult'
 
 /**
  * 分页查询用户
@@ -9,7 +10,7 @@ export function getUsers(params = {}) {
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') clean[k] = v
   }
-  return request({ url: '/users', method: 'get', params: clean })
+  return request({ url: '/users', method: 'get', params: clean }).then(assertBusinessOk)
 }
 
 /**
@@ -17,7 +18,7 @@ export function getUsers(params = {}) {
  * @param {number|string} id
  */
 export function getUserById(id) {
-  return request({ url: `/user/${id}`, method: 'get' })
+  return request({ url: `/user/${id}`, method: 'get' }).then(assertBusinessOk)
 }
 
 /**
@@ -25,7 +26,7 @@ export function getUserById(id) {
  * @param {object} data - UserModifyParam: name, mobile, username, password?, enabled, organizationIds[], positionIds[], roleIds[]
  */
 export function createUser(data) {
-  return request({ url: '/user', method: 'post', data })
+  return request({ url: '/user', method: 'post', data }).then(assertBusinessOk)
 }
 
 /**
@@ -34,7 +35,7 @@ export function createUser(data) {
  * @param {object} data
  */
 export function updateUser(id, data) {
-  return request({ url: `/user/${id}`, method: 'put', data })
+  return request({ url: `/user/${id}`, method: 'put', data }).then(assertBusinessOk)
 }
 
 /**
@@ -42,7 +43,7 @@ export function updateUser(id, data) {
  * @param {number|string} id
  */
 export function deleteUser(id) {
-  return request({ url: `/user/${id}`, method: 'delete' })
+  return request({ url: `/user/${id}`, method: 'delete' }).then(assertBusinessOk)
 }
 
 /**
@@ -51,5 +52,5 @@ export function deleteUser(id) {
  * @param {{ newPassword: string }} data
  */
 export function resetUserPassword(id, data) {
-  return request({ url: `/user/${id}/reset-password`, method: 'put', data })
+  return request({ url: `/user/${id}/reset-password`, method: 'put', data }).then(assertBusinessOk)
 }

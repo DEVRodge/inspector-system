@@ -114,6 +114,102 @@ function toEnabled(status) {
   return status === '启用'
 }
 
+/**
+ * 与后端 int64 对齐：有上级时传 number 或长整型 string。
+ * 根级（未选上级）传 null，不送 0 —— 不少实现会把 0 当成非法 id 校验失败，null 才表示无上级。
+ */
+function toApiOrganizationParentId(value) {
+  if (value == null || value === '') return null
+  const s = String(value).trim()
+  if (s === '' || s === '0') return null
+  const n = Number(s)
+  if (Number.isFinite(n) && Number.isSafeInteger(n)) {
+    if (n === 0) return null
+    return n
+  }
+  return s
+}
+
+/**
+ * 新增 POST：根用 null（与现网已验证行为一致）。
+ * 更新 PUT：部分后端对 null 不 merge 到库（当作「未传」），根需显式 0 才能从子节点改成根，否则表像「编辑无效」。
+ */
+function toApiOrganizationParentIdForMutation(value, { isUpdate = false } = {}) {
+  const v = toApiOrganizationParentId(value)
+  if (isUpdate && v == null) {
+    return 0
+  }
+  return v
+}
+
+/** 请求体 id：路径已是 /organization/{id}，仍与常见后端约定在 body 带 id 对齐 */
+function toOrganizationBodyId(keyOrId) {
+  if (keyOrId == null || keyOrId === '') return undefined
+  const s = String(keyOrId)
+  const n = Number(s)
+  if (Number.isFinite(n) && Number.isSafeInteger(n)) return n
+  return s
+}
+
+/**
+ * 接口/树里的 parentId：0、'0'、空 一律视为无上级，与后端「根为 null 非 0」对齐。
+ * 用于 mapDeptNode，避免行数据里带着 0 进表单。
+ */
+function normalizeDeptParentIdFromApi(raw) {
+  if (raw == null || raw === '') return null
+  if (raw === 0 || raw === '0') return null
+  if (typeof raw === 'string') {
+    const t = raw.trim()
+    if (t === '' || t === '0') return null
+    return t
+  }
+  return raw
+}
+
+/** 表单上级部门 a-select：无上级为 undefined，有上级为 id 字符串 */
+function parentIdToDeptForm(raw) {
+  const n = normalizeDeptParentIdFromApi(raw)
+  if (n == null) return undefined
+  return String(n)
+}
+
+/** 新增接口返回与列表行比对用：根节点 0 与 null/undefined 统一 */
+function normDeptParentId(v) {
+  if (v == null || v === '' || v === 0 || v === '0') return 0
+  return String(v)
+}
+
+/**
+ * 创建接口返回的 id 可能出现在多种形态；用于刷新列表后校验是否真的落库
+ * @param {unknown} created
+ */
+function pickCreatedOrgId(created) {
+  if (created == null) return null
+  if (typeof created === 'string' || typeof created === 'number') return String(created)
+  if (typeof created === 'object' && !Array.isArray(created)) {
+    const o = created
+    if (o.id != null) return String(o.id)
+    if (o.data != null && typeof o.data === 'object' && o.data.id != null) return String(o.data.id)
+  }
+  return null
+}
+
+function isNewDepartmentVisible(created, deptName, parentIdPayload) {
+  const rows = deptData.value || []
+  const wantParent = normDeptParentId(
+    parentIdPayload === undefined || parentIdPayload === null ? 0 : parentIdPayload,
+  )
+  const nameOk = (s) => (s && String(s).trim()) || ''
+  const wantName = nameOk(deptName)
+  const id = pickCreatedOrgId(created)
+  if (id) {
+    return rows.some((d) => String(d.key) === id || String(d.id) === id)
+  }
+  return rows.some(
+    (d) => nameOk(d.name) === wantName && normDeptParentId(d.parentId) === wantParent,
+  )
+}
+
 function getBizTypeLabel(value) {
   return LOG_BIZ_TYPE_OPTIONS.find((it) => it.value === value)?.label ?? value ?? '-'
 }
@@ -141,11 +237,13 @@ function dedupeById(list = []) {
 function mapDeptNode(row, parent = null) {
   const rawSort = row.sort ?? row.sequence ?? 0
   const sort = Number.isFinite(Number(rawSort)) ? Number(rawSort) : 0
+  const parentRaw = row.parentId ?? parent?.id ?? null
+  const parentIdNorm = normalizeDeptParentIdFromApi(parentRaw)
   return {
     key: String(row.id),
     id: row.id,
-    parentId: row.parentId ?? parent?.id ?? null,
-    parentName: parent?.name ?? '-',
+    parentId: parentIdNorm,
+    parentName: row.parentName ?? row.parent?.name ?? parent?.name ?? '-',
     name: row.name ?? '',
     remark: row.remark ?? '',
     members: row.members ?? 0,
@@ -328,7 +426,7 @@ async function loadPersonFromApi() {
   if (personKeyword.value?.trim()) baseParams.keyword = personKeyword.value.trim()
   try {
     const data = await getUsers(baseParams)
-    const arr = data?.records ?? (Array.isArray(data) ? data : [])
+    const arr = data?.records ?? data?.list ?? (Array.isArray(data) ? data : [])
     personPagination.total = data?.total ?? arr.length
     orgData.value = arr.map(mapUserFromApi)
   } catch (e) {
@@ -569,6 +667,10 @@ async function saveMember() {
     }
     if (memberForm.password) payload.password = memberForm.password
     if (currentMember.value) {
+      const uid = toOrganizationBodyId(currentMember.value.key ?? currentMember.value.id)
+      if (uid != null) {
+        payload.id = uid
+      }
       await updateUser(currentMember.value.key, payload)
       message.success('账号信息已更新')
       await loadPersonFromApi()
@@ -868,7 +970,7 @@ function fillDept(record) {
     Object.assign(deptForm, {
       key: record.key,
       name: record.name,
-      parentId: record.parentId != null && String(record.parentId) !== '0' ? String(record.parentId) : undefined,
+      parentId: parentIdToDeptForm(record.parentId),
       remark: record.remark ?? '',
       sort: record.sort ?? 0,
       status: record.status ?? '启用',
@@ -910,30 +1012,47 @@ async function openDeptEdit(record) {
   deptVisible.value = true
 }
 async function saveDept() {
-  if (!deptForm.name) {
+  const name = (deptForm.name && String(deptForm.name).trim()) || ''
+  if (!name) {
     message.warning('请填写部门名称')
-    return
+    // 须 reject，否则 Modal 的 @ok 会认为成功并关闭，用户误以为点确定无效
+    return Promise.reject()
   }
   try {
+    const isUpdate = !!currentDept.value
     const payload = {
-      parentId: deptForm.parentId ? String(deptForm.parentId) : 0,
-      name: deptForm.name,
+      parentId: toApiOrganizationParentIdForMutation(deptForm.parentId, { isUpdate }),
+      name,
       sort: deptForm.sort ?? 0,
       enabled: toEnabled(deptForm.status),
       remark: deptForm.remark ?? '',
     }
-    if (currentDept.value) {
-      await updateOrganization(currentDept.value.key, payload)
+    if (isUpdate) {
+      const idBody = toOrganizationBodyId(currentDept.value.key ?? currentDept.value.id)
+      if (idBody != null) {
+        payload.id = idBody
+      }
+      await updateOrganization(String(currentDept.value.key ?? currentDept.value.id), payload)
+      await Promise.all([loadDeptFromApi(), loadPersonFromApi()])
       message.success('部门已更新')
     } else {
-      await createOrganization(payload)
+      const created = await createOrganization(payload)
+      await Promise.all([loadDeptFromApi(), loadPersonFromApi()])
+      if (!isNewDepartmentVisible(created, name, payload.parentId)) {
+        message.error(
+          '接口已返回，但部门列表中未出现新部门，可能后端未落库。请在 Network 中查看 POST /organization 的 Response 并交给后端排查。',
+        )
+        return Promise.reject(new Error('DEPT_NOT_VISIBLE_AFTER_CREATE'))
+      }
       message.success('部门已新增')
     }
-    await Promise.all([loadDeptFromApi(), loadPersonFromApi()])
     deptVisible.value = false
   } catch (e) {
-    message.error('保存失败：' + (e?.message || '未知错误'))
-    throw e
+    if (e?.message === 'DEPT_NOT_VISIBLE_AFTER_CREATE') {
+      return Promise.reject(e)
+    }
+    message.error('保存失败：' + getApiErrorMessage(e))
+    return Promise.reject(e)
   }
 }
 function removeDept(record) {

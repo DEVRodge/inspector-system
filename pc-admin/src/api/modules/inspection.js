@@ -3,6 +3,7 @@
  * 对接后端 /inspection/*
  */
 import { request } from '../http'
+import { assertBusinessOk } from '../businessResult'
 import { getFilePreviewUrl } from '@/utils/file'
 import { formToCron } from '@/utils/cron'
 import { formatDateTime } from '@/utils/dateTime'
@@ -59,19 +60,21 @@ export function getTemplatePage(params = {}) {
 }
 
 export function getTemplateById(id) {
-  return request({ url: `/inspection/template/${id}`, method: 'get' }).then((data) => (data ? toKey(data) : null))
+  return request({ url: `/inspection/template/${id}`, method: 'get' })
+    .then(assertBusinessOk)
+    .then((data) => (data ? toKey(data) : null))
 }
 
 export function deleteTemplate(id) {
-  return request({ url: `/inspection-template/${id}`, method: 'delete' })
+  return request({ url: `/inspection/template/${id}`, method: 'delete' }).then(assertBusinessOk)
 }
 
 export function updateTemplate(id, data) {
   return request({
-    url: `/inspection-template/${id}`,
+    url: `/inspection/template/${id}`,
     method: 'put',
     data: buildTemplatePayload(data),
-  })
+  }).then(assertBusinessOk)
 }
 
 function buildTemplatePayload(data) {
@@ -90,7 +93,7 @@ export function createTemplate(data) {
     url: '/inspection/template',
     method: 'post',
     data: buildTemplatePayload(data),
-  })
+  }).then(assertBusinessOk)
 }
 
 export function getTemplateItems(templateId) {
@@ -125,11 +128,15 @@ export function createTemplateItem(data) {
     url: '/inspection/template/item',
     method: 'post',
     data: payload,
-  })
+  }).then(assertBusinessOk)
 }
 
 export function updateTemplateItem(id, data) {
+  // 后端 ModifyParam 仍然校验 templateId 不为空；编辑接口若不带 templateId 会 412
+  // 另外 body 里把 id 带上，对齐部分后端 BaseModifyParam 的契约
   const payload = {
+    id: id != null && id !== '' ? String(id) : undefined,
+    templateId: data.templateId,
     name: data.name ?? data.title,
     type: data.type ?? 'radio',
     required: !!data.required,
@@ -140,15 +147,15 @@ export function updateTemplateItem(id, data) {
   return request({
     url: `/inspection/template/item/${id}`,
     method: 'put',
-    data: payload,
-  })
+    data: Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined)),
+  }).then(assertBusinessOk)
 }
 
 export function deleteTemplateItem(id) {
   return request({
     url: `/inspection/template/item/${id}`,
     method: 'delete',
-  })
+  }).then(assertBusinessOk)
 }
 
 // ---------- 计划任务 ----------
@@ -206,27 +213,27 @@ export function getTaskPage(params = {}) {
 }
 
 export function getTaskById(id) {
-  return request({ url: `/inspection/task/${id}`, method: 'get' }).then((data) =>
-    data ? toKey(normalizeTaskRecord(data)) : null,
-  )
+  return request({ url: `/inspection/task/${id}`, method: 'get' })
+    .then(assertBusinessOk)
+    .then((data) => (data ? toKey(normalizeTaskRecord(data)) : null))
 }
 
 export function createTask(data) {
   const payload = buildTaskPayload(data)
-  return request({ url: '/inspection/task', method: 'post', data: payload }).then((data) =>
-    data ? toKey(normalizeTaskRecord(data)) : null,
-  )
+  return request({ url: '/inspection/task', method: 'post', data: payload })
+    .then(assertBusinessOk)
+    .then((data) => (data ? toKey(normalizeTaskRecord(data)) : null))
 }
 
 export function updateTask(id, data) {
   const payload = buildTaskPayload(data)
-  return request({ url: `/inspection/task/${id}`, method: 'put', data: payload }).then((data) =>
-    data ? toKey(normalizeTaskRecord(data)) : null,
-  )
+  return request({ url: `/inspection/task/${id}`, method: 'put', data: payload })
+    .then(assertBusinessOk)
+    .then((data) => (data ? toKey(normalizeTaskRecord(data)) : null))
 }
 
 export function deleteTask(id) {
-  return request({ url: `/inspection/task/${id}`, method: 'delete' })
+  return request({ url: `/inspection/task/${id}`, method: 'delete' }).then(assertBusinessOk)
 }
 
 // ---------- 巡检记录 ----------

@@ -2,6 +2,7 @@
  * 异常管理接口（严格对齐 /inspection/exception/*）
  */
 import { request } from '../http'
+import { assertBusinessOk } from '../businessResult'
 
 export const EXCEPTION_STATUS_MAP = {
   PENDING: '待处理',
@@ -84,7 +85,7 @@ export function assignException(exceptionId, handlerId) {
     url: '/inspection/exception/assign',
     method: 'post',
     data: { exceptionId: String(exceptionId), handlerId: String(handlerId) },
-  })
+  }).then(assertBusinessOk)
 }
 
 export function processException(exceptionId, data = {}) {
@@ -96,5 +97,5 @@ export function processException(exceptionId, data = {}) {
       processResult: data.processResult,
       fileIds: (data.fileIds ?? []).map((id) => String(id)),
     },
-  })
+  }).then(assertBusinessOk)
 }

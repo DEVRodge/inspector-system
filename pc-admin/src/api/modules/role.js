@@ -1,4 +1,5 @@
 import { request } from '../http'
+import { assertBusinessOk } from '../businessResult'
 
 /**
  * 分页查询角色
@@ -35,7 +36,7 @@ export function getRoleUserIds(id) {
  * @param {number} menuId
  */
 export function saveRoleMenuMapping(roleId, menuId) {
-  return request({ url: `/role/${roleId}/menu-mapping`, method: 'post', params: { menuId } })
+  return request({ url: `/role/${roleId}/menu-mapping`, method: 'post', params: { menuId } }).then(assertBusinessOk)
 }
 
 /**
@@ -44,7 +45,7 @@ export function saveRoleMenuMapping(roleId, menuId) {
  * @param {number} menuId
  */
 export function deleteRoleMenuMapping(roleId, menuId) {
-  return request({ url: `/role/${roleId}/menu-mapping`, method: 'delete', params: { menuId } })
+  return request({ url: `/role/${roleId}/menu-mapping`, method: 'delete', params: { menuId } }).then(assertBusinessOk)
 }
 
 /**
@@ -52,7 +53,7 @@ export function deleteRoleMenuMapping(roleId, menuId) {
  * @param {object} data - { name, remark?, enabled }
  */
 export function createRole(data) {
-  return request({ url: '/role', method: 'post', data })
+  return request({ url: '/role', method: 'post', data }).then(assertBusinessOk)
 }
 
 /**
@@ -61,7 +62,7 @@ export function createRole(data) {
  * @param {object} data
  */
 export function updateRole(id, data) {
-  return request({ url: `/role/${id}`, method: 'put', data })
+  return request({ url: `/role/${id}`, method: 'put', data }).then(assertBusinessOk)
 }
 
 /**
@@ -69,5 +70,5 @@ export function updateRole(id, data) {
  * @param {number|string} id
  */
 export function deleteRole(id) {
-  return request({ url: `/role/${id}`, method: 'delete' })
+  return request({ url: `/role/${id}`, method: 'delete' }).then(assertBusinessOk)
 }

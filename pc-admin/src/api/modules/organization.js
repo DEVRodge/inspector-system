@@ -1,4 +1,5 @@
 import { request } from '../http'
+import { assertBusinessOk } from '../businessResult'
 
 /**
  * 查询组织机构（树形）
@@ -18,10 +19,11 @@ export function getOrganizationsList(params = {}) {
 
 /**
  * 根据 ID 获取组织机构
+ * 与写接口一样，常返回 { code, data: OrganizationVO }，需解包后才是真实详情。
  * @param {number|string} id
  */
 export function getOrganizationById(id) {
-  return request({ url: `/organizations/${id}`, method: 'get' })
+  return request({ url: `/organizations/${id}`, method: 'get' }).then(assertBusinessOk)
 }
 
 /**
@@ -37,7 +39,7 @@ export function getPostAndPosition(id) {
  * @param {object} data - { name, parentId?, remark?, enabled?, sort? }
  */
 export function createOrganization(data) {
-  return request({ url: '/organization', method: 'post', data })
+  return request({ url: '/organization', method: 'post', data }).then(assertBusinessOk)
 }
 
 /**
@@ -46,7 +48,7 @@ export function createOrganization(data) {
  * @param {object} data
  */
 export function updateOrganization(id, data) {
-  return request({ url: `/organization/${id}`, method: 'put', data })
+  return request({ url: `/organization/${id}`, method: 'put', data }).then(assertBusinessOk)
 }
 
 /**
@@ -54,5 +56,5 @@ export function updateOrganization(id, data) {
  * @param {number|string} id
  */
 export function deleteOrganization(id) {
-  return request({ url: `/organization/${id}`, method: 'delete' })
+  return request({ url: `/organization/${id}`, method: 'delete' }).then(assertBusinessOk)
 }

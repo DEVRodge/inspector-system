@@ -5,6 +5,7 @@ import { message } from 'ant-design-vue'
 import { LockOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { useAuthStore } from '../../stores/auth'
 import { useAppMenuStore } from '../../stores/appMenu'
+import logoImg from '../../assets/logo.png'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -56,7 +57,6 @@ async function submit() {
       "
     >
       <div>
-        <div style="font-size: 14px; opacity: 0.85; letter-spacing: 2px">GOKIN SOLAR</div>
         <h1 style="font-size: 42px; margin: 16px 0 12px; color: #fff">
           光伏厂区设备巡检数字化系统
         </h1>
@@ -69,7 +69,8 @@ async function submit() {
 
     <section style="display: flex; align-items: center; justify-content: center; padding: 32px">
       <a-card :bordered="false" style="width: 420px; border-radius: 24px; box-shadow: 0 18px 48px rgba(15, 27, 45, 0.16)">
-        <div style="margin-bottom: 28px">
+        <div class="login-card__head">
+          <img class="login-card__logo" :src="logoImg" alt="" role="presentation" />
           <div style="font-size: 28px; font-weight: 700; color: #1f2329">后台登录</div>
           <div style="margin-top: 8px; color: #86909c">
             使用账号密码进入 PC 管理端
@@ -103,3 +104,18 @@ async function submit() {
     </section>
   </div>
 </template>
+
+<style scoped>
+.login-card__head {
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.login-card__logo {
+  display: block;
+  max-width: 200px;
+  width: 100%;
+  height: auto;
+  margin: 0 auto 20px;
+}
+</style>

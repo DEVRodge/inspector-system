@@ -46,8 +46,7 @@ export const useTemplateStore = defineStore('template', () => {
   }
 
   async function update(id, template) {
-    const index = list.value.findIndex((t) => String(t.key) === String(id) || String(t.id) === String(id))
-    if (index === -1) return false
+    // 始终调用后端，不再依赖本地缓存是否命中，避免"成功提示但未落库"的幽灵操作。
     await updateTemplate(id, {
       name: template.name,
       deviceType: template.deviceType,
@@ -55,24 +54,26 @@ export const useTemplateStore = defineStore('template', () => {
       version: template.version,
       status: template.status,
     })
-    const itemCount = template.items?.length ?? 0
-    const requiredCount = template.items?.filter((i) => i.required)?.length ?? 0
-    list.value[index] = {
-      ...list.value[index],
-      ...template,
-      key: id,
-      id,
-      itemCount,
-      requiredCount,
+    const index = list.value.findIndex((t) => String(t.key) === String(id) || String(t.id) === String(id))
+    if (index !== -1) {
+      const itemCount = template.items?.length ?? 0
+      const requiredCount = template.items?.filter((i) => i.required)?.length ?? 0
+      list.value[index] = {
+        ...list.value[index],
+        ...template,
+        key: id,
+        id,
+        itemCount,
+        requiredCount,
+      }
     }
     return true
   }
 
   async function remove(id) {
-    const index = list.value.findIndex((t) => String(t.key) === String(id) || String(t.id) === String(id))
-    if (index === -1) return false
     await deleteTemplate(id)
-    list.value.splice(index, 1)
+    const index = list.value.findIndex((t) => String(t.key) === String(id) || String(t.id) === String(id))
+    if (index !== -1) list.value.splice(index, 1)
     return true
   }
 

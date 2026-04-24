@@ -1,4 +1,5 @@
 import { request } from '../http'
+import { assertBusinessOk } from '../businessResult'
 
 /**
  * 查询岗位
@@ -22,7 +23,7 @@ export function getPositionsByIds(ids) {
  * @param {number|string} id
  */
 export function getPositionById(id) {
-  return request({ url: `/position/${id}`, method: 'get' })
+  return request({ url: `/position/${id}`, method: 'get' }).then(assertBusinessOk)
 }
 
 /**
@@ -30,7 +31,7 @@ export function getPositionById(id) {
  * @param {object} data
  */
 export function createPosition(data) {
-  return request({ url: '/position', method: 'post', data })
+  return request({ url: '/position', method: 'post', data }).then(assertBusinessOk)
 }
 
 /**
@@ -39,7 +40,7 @@ export function createPosition(data) {
  * @param {object} data
  */
 export function updatePosition(id, data) {
-  return request({ url: `/position/${id}`, method: 'put', data })
+  return request({ url: `/position/${id}`, method: 'put', data }).then(assertBusinessOk)
 }
 
 /**
@@ -47,5 +48,5 @@ export function updatePosition(id, data) {
  * @param {number|string} id
  */
 export function deletePosition(id) {
-  return request({ url: `/position/${id}`, method: 'delete' })
+  return request({ url: `/position/${id}`, method: 'delete' }).then(assertBusinessOk)
 }

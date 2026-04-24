@@ -1,4 +1,5 @@
 import { request } from '../http'
+import { assertBusinessOk } from '../businessResult'
 
 /**
  * 解包 GET /dictionary/list 常见响应（裸数组、data、records、list）
@@ -35,7 +36,7 @@ export function getDictionaryPage(params) {
  * @param {number|string} id
  */
 export function getDictionaryById(id) {
-  return request({ url: `/dictionary/${id}`, method: 'get' })
+  return request({ url: `/dictionary/${id}`, method: 'get' }).then(assertBusinessOk)
 }
 
 /**
@@ -43,7 +44,7 @@ export function getDictionaryById(id) {
  * @param {object} data
  */
 export function createDictionary(data) {
-  return request({ url: '/dictionary', method: 'post', data })
+  return request({ url: '/dictionary', method: 'post', data }).then(assertBusinessOk)
 }
 
 /**
@@ -52,7 +53,7 @@ export function createDictionary(data) {
  * @param {object} data
  */
 export function updateDictionary(id, data) {
-  return request({ url: `/dictionary/${id}`, method: 'put', data })
+  return request({ url: `/dictionary/${id}`, method: 'put', data }).then(assertBusinessOk)
 }
 
 /**
@@ -60,5 +61,5 @@ export function updateDictionary(id, data) {
  * @param {number|string} id
  */
 export function deleteDictionary(id) {
-  return request({ url: `/dictionary/${id}`, method: 'delete' })
+  return request({ url: `/dictionary/${id}`, method: 'delete' }).then(assertBusinessOk)
 }

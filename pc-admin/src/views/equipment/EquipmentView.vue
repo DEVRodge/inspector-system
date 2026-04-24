@@ -10,6 +10,7 @@ import {
   getDepartments,
   getDevicePage,
   importEquipment,
+  parseDeviceImportResponse,
   updateDevice,
 } from '../../api/modules/equipment'
 import { getDictionaryList } from '../../api/modules/dictionary'
@@ -376,19 +377,46 @@ async function handleImportFile(e) {
   importLoading.value = true
   try {
     const res = await importEquipment(file)
-    const data = res?.data ?? res
-    const successCount = data?.successCount ?? data?.count ?? 0
-    if (data?.success && successCount > 0) {
-      message.success(`成功导入 ${successCount} 条设备`)
-      loadList()
-    } else if (data?.errors?.length) {
+    const p = parseDeviceImportResponse(res)
+    const { successCount, errors, successFlag, message: serverMsg, codeOk } = p
+
+    if (!codeOk) {
+      message.error(serverMsg || '导入失败，请确认文件格式与后端要求一致')
+      return
+    }
+    if (errors.length > 0 && successCount === 0) {
+      Modal.warning({
+        title: '导入未成功',
+        content:
+          errors
+            .slice(0, 5)
+            .map((e) => (typeof e === 'string' ? e : e?.message ?? e?.msg ?? String(e)))
+            .join('\n') + (errors.length > 5 ? `\n... 共 ${errors.length} 条` : ''),
+      })
+      return
+    }
+    if (errors.length > 0 && successCount > 0) {
       Modal.warning({
         title: '部分行导入失败',
-        content: data.errors.slice(0, 5).join('\n') + (data.errors.length > 5 ? `\n... 共 ${data.errors.length} 条` : ''),
+        content:
+          errors
+            .slice(0, 5)
+            .map((e) => (typeof e === 'string' ? e : e?.message ?? e?.msg ?? String(e)))
+            .join('\n') + (errors.length > 5 ? `\n... 共 ${errors.length} 条` : ''),
       })
-    } else {
-      message.warning(data?.message || '未解析到有效数据')
     }
+    if (successFlag === false && successCount === 0 && errors.length === 0) {
+      message.error(serverMsg || '导入失败')
+      return
+    }
+    if (successCount > 0) {
+      message.success(`成功导入 ${successCount} 条设备`)
+    } else if (successFlag === true) {
+      message.success(serverMsg || '导入成功')
+    } else {
+      message.success(serverMsg || '导入已处理，列表已更新')
+    }
+    await loadList()
   } catch (err) {
     message.error(err?.response?.data?.message || '导入失败，请确认后端接口已就绪')
   } finally {

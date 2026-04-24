@@ -2,6 +2,7 @@
  * 设备台账相关接口，对接后端 /device/*
  */
 import { http, request } from '../http'
+import { assertBusinessOk } from '../businessResult'
 import { getOrganizationsList } from './organization'
 
 function toKey(item) {
@@ -42,7 +43,9 @@ export function getDevicePage(params = {}) {
 }
 
 export function getDeviceById(id) {
-  return request({ url: `/device/${id}`, method: 'get' }).then((data) => (data ? toKey(data) : null))
+  return request({ url: `/device/${id}`, method: 'get' })
+    .then(assertBusinessOk)
+    .then((data) => (data ? toKey(data) : null))
 }
 
 /** Apifox DeviceModifyParam */
@@ -69,7 +72,7 @@ export function createDevice(data) {
     url: '/device',
     method: 'post',
     data: payload,
-  })
+  }).then(assertBusinessOk)
 }
 
 export function updateDevice(id, data) {
@@ -78,11 +81,11 @@ export function updateDevice(id, data) {
     url: `/device/${id}`,
     method: 'put',
     data: payload,
-  })
+  }).then(assertBusinessOk)
 }
 
 export function deleteDevice(id) {
-  return request({ url: `/device/${id}`, method: 'delete' })
+  return request({ url: `/device/${id}`, method: 'delete' }).then(assertBusinessOk)
 }
 
 export function exportTemplate() {
@@ -108,4 +111,50 @@ export function importEquipment(file) {
   return http.post('/device/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
+}
+
+/**
+ * 解析 POST /device/import 的响应，兼容 { success, count }、{ data: { count } }、仅 code 等写法。
+ * @param {import('axios').AxiosResponse|unknown} axiosRes
+ * @returns {{ successCount: number, errors: string[], successFlag: boolean|undefined, message?: string, codeOk: boolean }}
+ */
+export function parseDeviceImportResponse(axiosRes) {
+  const raw = axiosRes && typeof axiosRes === 'object' && 'data' in axiosRes ? axiosRes.data : axiosRes
+  if (raw == null || typeof raw !== 'object') {
+    return { successCount: 0, errors: [], successFlag: undefined, message: undefined, codeOk: true }
+  }
+  let body = { ...raw }
+  if (body.data != null && typeof body.data === 'object' && !Array.isArray(body.data)) {
+    const inner = body.data
+    if (
+      inner.success != null ||
+      inner.count != null ||
+      inner.successCount != null ||
+      Array.isArray(inner.errors)
+    ) {
+      body = { ...body, ...inner }
+    }
+  }
+  const errors = Array.isArray(body.errors) ? body.errors : []
+  const toNum = (v) => {
+    const x = Number(v)
+    return Number.isFinite(x) && x >= 0 ? Math.floor(x) : 0
+  }
+  const successCount = toNum(
+    body.successCount ??
+      body.count ??
+      body.total ??
+      body.imported ??
+      body.importedCount ??
+      body.insertCount,
+  )
+  const code = body.code
+  const codeOk = code === undefined || code === null || code === 0 || code === 200
+  return {
+    successCount,
+    errors,
+    successFlag: body.success,
+    message: body.message ?? body.msg,
+    codeOk,
+  }
 }
